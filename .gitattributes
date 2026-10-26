@@ -1,0 +1,7 @@
+# Keep line endings as LF everywhere so checks behave the same on Windows worktrees.
+* text=auto eol=lf
+
+*.sh text eol=lf
+*.docx binary
+*.png binary
+*.jpg binary
