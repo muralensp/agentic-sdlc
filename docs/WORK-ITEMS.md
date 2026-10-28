@@ -37,5 +37,5 @@ Context code: `ADLC`. Milestones refer to PRD section 12.
 | ADLC-029 | ADLC (Tool) | Acceptance pilot on BOSS NextGen | Open | Sec 11; 13.1 | M4. Brief: docs/work-items/ADLC-029.md |
 | ADLC-030 | ADLC (Tool) | Regenerate the PRD `.docx` from `PRD.md` | Open | Decision 10 | M4. Brief: docs/work-items/ADLC-030.md |
 | ADLC-031 | ADLC (Tool) | Parallel workers (deferred, not scheduled) | Open | 7.2; M5 | M5. Brief: docs/work-items/ADLC-031.md |
-| ADLC-032 | ADLC (Tool) | Substrate prototype: `claude -p`, Stop hook, PreToolUse hook | Open | Decision 21 | M2a. Brief: docs/work-items/ADLC-032.md. Added by decision 21. |
+| ADLC-032 | ADLC (Tool) | Substrate prototype: `claude -p`, Stop hook, PreToolUse hook | IN_REVIEW | Decision 21 | M2a. Brief: docs/work-items/ADLC-032.md. Added by decision 21. Findings: docs/research/claude-code-substrate.md. Hooks work for file tools; Bash bypasses them, so the driver must re-check the diff. |
 | ADLC-033 | ADLC (Tool) | Claude Code assets package: subagents, hooks, deny rules | Open | Decision 21; FR-15, FR-22 | M2a. Brief: docs/work-items/ADLC-033.md. Added by decision 21. |
