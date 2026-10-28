@@ -317,3 +317,43 @@ def test_this_repos_board_and_briefs_all_validate():
     loaded = load_tasks(ROOT / "docs" / "WORK-ITEMS.md", ROOT / "docs" / "work-items")
     assert loaded.rejections == []
     assert len(loaded.states) >= 33
+
+
+# --- DRAFT items and next_priority (ADLC-007) --------------------------------------------------
+
+
+def test_a_draft_item_is_not_validated_and_is_never_selectable(tmp_path):
+    rows = [("T-001", "DRAFT"), ("T-002", "DRAFT"), ("T-003", "DRAFT")]
+    board, folder = make_repo(tmp_path, rows, {"T-002": "not a brief at all"})
+    (folder / "T-003.md").write_text("---\nkey: T-003\n---\n")
+    loaded = load_tasks(board, folder)
+    assert loaded.rejections == []
+    assert loaded.tasks == {}
+    assert loaded.states == dict.fromkeys(["T-001", "T-002", "T-003"], State.DRAFT)
+    assert select(loaded).ready == []
+
+
+def test_depending_on_a_draft_item_waits(tmp_path):
+    rows = [("T-001", "DRAFT"), ("T-002", "Open")]
+    board, folder = make_repo(tmp_path, rows, {"T-002": spec("T-002", deps="[T-001]")})
+    assert select(load_tasks(board, folder)).waiting == {"T-002": "waiting on T-001 (DRAFT)"}
+
+
+def test_an_item_promoted_to_backlog_is_checked_again(tmp_path):
+    board, folder = make_repo(tmp_path, [("T-001", "Open")], {"T-001": "---\nkey: T-001\n---\n"})
+    assert [r.key for r in load_tasks(board, folder).rejections] == ["T-001"]
+
+
+def test_next_priority_is_one_above_the_highest_in_any_brief(tmp_path):
+    from adlc.tasks import next_priority
+
+    folder = tmp_path / "b"
+    folder.mkdir()
+    assert next_priority(folder) == 1  # nothing in the folder yet
+    assert next_priority(tmp_path / "missing") == 1
+    (folder / "T-001.md").write_text(spec("T-001", priority=4))
+    (folder / "T-002.md").write_text(spec("T-002", priority=9))
+    (folder / "T-003.md").write_text("garbage, no front-matter")
+    (folder / "T-004.md").write_text("---\npriority: many\n---\n")
+    (folder / "notes.txt").write_text("---\npriority: 50\n---\n")
+    assert next_priority(folder) == 10
