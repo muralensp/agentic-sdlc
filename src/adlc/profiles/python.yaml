@@ -1,0 +1,16 @@
+# The python stack profile (PRD 13.2; proposed defaults, to be confirmed).
+# Use it with `extends: python` in .adlc/config.yaml.
+# mypy is left out because it only applies when a repo configures it: add `types: mypy .` yourself.
+
+extends: generic
+
+dod:
+  install: python -m pip install -e .[dev]
+  lint: ruff check .
+  format: ruff format --check .
+  test: pytest --cov --cov-fail-under=80      # a repo sets its own threshold by redefining `test`
+  dependency_scan: pip-audit
+  secret_scan: gitleaks detect
+
+merge:
+  required_checks: ["CI passed"]

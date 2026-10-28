@@ -1,0 +1,39 @@
+# The dotnet stack profile, derived from BOSS NextGen's CONTRIBUTING.md (PRD 13.1).
+# Use it with `extends: dotnet` in .adlc/config.yaml. Run the commands from Git Bash on Windows.
+
+extends: generic
+
+dod:                          # in run order; the coverage thresholds (95% core, 80% CRUD) live in test.sh
+  build: dotnet build
+  lint: bash build/scripts/lint.sh
+  test: bash build/scripts/test.sh
+  integration: bash build/scripts/integration-test.sh
+  dependency_scan: bash build/scripts/dependency-scan.sh
+  secret_scan: bash build/scripts/secret-scan.sh            # needs Docker
+  smoke: bash build/scripts/smoke-test.sh
+  e2e_smoke: bash build/scripts/e2e-smoke-test.sh
+  contract: bash build/scripts/contract-test.sh             # only when a contract changes (ADLC-014 decides)
+
+# Added to the generic list. Proposed globs from the BOSS folder names; PLAT-009 confirms them.
+protected_extra:
+  - "build/azure-pipelines.yml"        # edited together with ci.yml (ADR-0005)
+  - "**/Dockerfile*"
+  - "docker-compose*.yml"
+  - "**/appsettings*.json"
+  - "**/.gitattributes"
+  - "*.sln"
+  - "src/Gateway/**"                   # gateway, JWT and authorization policies
+  - "src/**/Security/**"
+  - "src/**/Identity/**"
+  - "src/**/Rules*/**"                 # Rules Engine: Decision Trace must be verified (ADR-0002)
+  - "src/**/Audit*/**"                 # append-only, audit_writer role
+  - "src/Api/Program.cs"
+  - "**/TestApiFactory.cs"
+  - "CLAUDE.md"
+  - "adr/**"
+  - "docs/quality-gates/**"
+  - "docs/BRANCH-PROTECTION.md"
+
+merge:
+  required_checks: ["CI passed", "Analyze (csharp)"]
+  method: squash

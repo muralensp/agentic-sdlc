@@ -20,6 +20,7 @@ import yaml
 from adlc.methods import MethodsError, Registry, build_registry
 
 MAX_PROFILE_DEPTH = 3
+REQUIRED_DOD = ("lint", "test")  # commands the orchestrator cannot do without
 _BUILTIN_NAME = re.compile(r"^[a-z][a-z0-9_-]*$")
 
 
@@ -246,6 +247,11 @@ def _resolve(ref: str, repo: Path, trail: list[str], errors: list[str]) -> dict:
     parent = data.get("extends")
     base = _resolve(parent, repo, [*trail, ref], errors) if parent else {}
     return _merge(base, {k: v for k, v in data.items() if k != "extends"})
+
+
+def missing_dod(settings: Settings) -> tuple[str, ...]:
+    """The required Definition of Done commands the settings do not define."""
+    return tuple(name for name in REQUIRED_DOD if name not in settings.dod)
 
 
 def load_config(repo: str | Path) -> Settings:
