@@ -17,6 +17,10 @@ scratch/test_*.py
 # ADLC run output (may contain code and prompts)
 .adlc/logs/
 
+# Board writer lock and temp files (created next to WORK-ITEMS.md)
+.WORK-ITEMS.md.lock
+.WORK-ITEMS.md.*.tmp
+
 # Editors and OS
 .idea/
 .vscode/
