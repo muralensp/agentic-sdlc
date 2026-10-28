@@ -10,6 +10,10 @@ dist/
 .coverage
 htmlcov/
 
+#Adhoc test python files
+scratch
+scratch/test_*.py
+
 # ADLC run output (may contain code and prompts)
 .adlc/logs/
 
