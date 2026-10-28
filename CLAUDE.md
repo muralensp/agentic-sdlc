@@ -51,4 +51,4 @@ detail belongs in `PRD.md`, `docs/WORK-ITEM-WALKTHROUGH.md`, and the run logs. M
 
 ## Status
 
-ADLC-001 (scaffold) and ADLC-002 (remote and branch protection) and ADLC-004 (board parser and writer) are DONE; `main` is protected. Next: ADLC-003. See `docs/WORK-ITEMS.md` for the rest.
+ADLC-001 to ADLC-006 and ADLC-032 are DONE (scaffold, branch protection, doctor, board, state machine, config); `main` is protected. In review: ADLC-007 (`add`, `status`, `log`). Next: ADLC-008. `docs/WORK-ITEMS.md` is the source of truth for status.

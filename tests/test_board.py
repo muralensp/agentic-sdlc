@@ -250,3 +250,112 @@ def test_real_boss_board_round_trips_and_edits_one_line():
     first = table.rows[0]
     after = with_cell(real, first.key, "Status", "IN_PROGRESS")
     assert len(changed_lines(real, after)) == 1
+
+
+# --- adding a row (ADLC-007) ------------------------------------------------------------------
+
+ADD_BOARD = (
+    "# Log\n\nIntro | with a pipe\n\n"
+    "| Key | Context | Title | Status | Linked PRD Chapter / Day | Notes |\n"
+    "|---|---|---|---|---|---|\n"
+    "| T-001 | Ctx (A) | First | Open | Day 1 | n1 |\n"
+    "| T-002 | Ctx (B) | Second | DONE |  | n2 |\n"
+    "\nAfter the table.\n"
+)
+
+
+def new_row(key="T-003", **over):
+    values = {"key": key, "context": "Ctx (B)", "title": "Third", "status": "DRAFT"}
+    values.update(over)
+    return values
+
+
+def test_with_row_inserts_one_line_after_the_last_row_and_changes_nothing_else():
+    from adlc.board import with_row
+
+    out = with_row(ADD_BOARD, new_row(notes="Brief: x.md"))
+    expected = ADD_BOARD.replace(
+        "| n2 |\n", "| n2 |\n| T-003 | Ctx (B) | Third | DRAFT |  | Brief: x.md |\n"
+    )
+    assert out == expected
+
+
+def test_with_row_matches_columns_by_name_prefix_and_leaves_unknown_ones_blank():
+    from adlc.board import with_row
+
+    out = with_row(ADD_BOARD, new_row(**{"linked prd": "FR-5"}))
+    assert "| T-003 | Ctx (B) | Third | DRAFT | FR-5 |  |\n" in out
+
+
+def test_with_row_escapes_pipes_and_refuses_newlines():
+    from adlc.board import with_row
+
+    assert "a " + chr(92) + "| b" in with_row(ADD_BOARD, new_row(title="a | b"))
+    with pytest.raises(BoardError):
+        with_row(ADD_BOARD, new_row(title="a\nb"))
+
+
+def test_with_row_refuses_a_duplicate_key_and_an_unknown_column():
+    from adlc.board import with_row
+
+    with pytest.raises(BoardError, match="already"):
+        with_row(ADD_BOARD, new_row(key="T-002"))
+    with pytest.raises(BoardError, match="column"):
+        with_row(ADD_BOARD, new_row(colour="red"))
+
+
+def test_with_row_needs_a_key():
+    from adlc.board import with_row
+
+    with pytest.raises(BoardError, match="key"):
+        with_row(ADD_BOARD, {"title": "x"})
+
+
+def test_with_row_works_on_an_empty_table_and_without_a_final_newline():
+    from adlc.board import with_row
+
+    head = "| Key | Status | Notes |\n|---|---|---|"
+    assert with_row(head, {"key": "T-001", "status": "DRAFT"}).endswith(
+        "|---|---|---|\n| T-001 | DRAFT |  |"
+    )
+    full = head + "\n| T-001 | Open | n |"
+    assert with_row(full, {"key": "T-002"}) == full + "\n| T-002 |  |  |"
+
+
+def test_with_row_keeps_crlf_line_endings():
+    from adlc.board import with_row
+
+    crlf = ADD_BOARD.replace("\n", "\r\n")
+    out = with_row(crlf, new_row())
+    assert "| T-003 | Ctx (B) | Third | DRAFT |  |  |\r\n" in out
+    assert out.count("\r\n") == crlf.count("\r\n") + 1 and out.count("\n") == out.count("\r\n")
+
+
+def test_board_add_row_writes_under_the_lock_and_readds_nothing(tmp_path):
+    path = tmp_path / "WORK-ITEMS.md"
+    path.write_bytes(ADD_BOARD.encode())
+    board = Board(path)
+    board.add_row(new_row())
+    assert [r.key for r in board.rows()] == ["T-001", "T-002", "T-003"]
+    with pytest.raises(BoardError):
+        board.add_row(new_row())
+    assert not list(tmp_path.glob(".WORK-ITEMS.md.*"))
+
+
+def test_add_row_inside_a_held_lock_does_not_deadlock(tmp_path):
+    path = tmp_path / "WORK-ITEMS.md"
+    path.write_bytes(ADD_BOARD.encode())
+    board = Board(path)
+    with board.lock():
+        board.add_row(new_row())
+        board.set_cell("T-003", "Status", "BACKLOG")
+    assert board.rows()[-1].cells["Status"] == "BACKLOG"
+    assert not list(tmp_path.glob(".WORK-ITEMS.md.lock"))
+
+
+def test_add_row_refuses_while_another_writer_holds_the_lock(tmp_path):
+    path = tmp_path / "WORK-ITEMS.md"
+    path.write_bytes(ADD_BOARD.encode())
+    (tmp_path / ".WORK-ITEMS.md.lock").write_text("123")
+    with pytest.raises(BoardLocked):
+        Board(path).add_row(new_row())

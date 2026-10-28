@@ -1,6 +1,7 @@
 """Parser and writer for the board: the Markdown table in WORK-ITEMS.md.
 
-Only the Status and Notes cells can be edited. An edit replaces the characters of one cell and
+Only the Status and Notes cells can be edited, and a new row can be added at the end of the table.
+An edit replaces the characters of one cell and
 nothing else, so prose, other tables, unknown columns, padding and line endings come back as they
 were. Values are opaque text here; checking them against the state list is the state machine's job.
 """
@@ -39,6 +40,7 @@ class Row:
 class Table:
     header: tuple[str, ...]
     rows: tuple[Row, ...]
+    last_line: int  # 0-based index of the table's last line (the separator if there are no rows)
 
     def row(self, key: str) -> Row:
         for row in self.rows:
@@ -116,7 +118,7 @@ def parse(text: str) -> Table:
             )
         first_seen[key] = n + 1
         rows.append(Row(key, n + 1, dict(zip(header, cells, strict=True))))
-    return Table(tuple(header), tuple(rows))
+    return Table(tuple(header), tuple(rows), body_at + len(rows) - 1)
 
 
 def with_cell(text: str, key: str, column: str, value: str, expected: str | None = None) -> str:
@@ -155,12 +157,48 @@ def with_cell(text: str, key: str, column: str, value: str, expected: str | None
     return "\n".join(lines)
 
 
+def _column(header: tuple[str, ...], name: str) -> int:
+    """Index of the column called `name`: an exact match, else a header starting with it."""
+    lowered = [h.lower() for h in header]
+    name = name.lower()
+    if name in lowered:
+        return lowered.index(name)
+    for i, h in enumerate(lowered):
+        if h.startswith(name):
+            return i
+    raise BoardError(f"the board has no column {name!r}")
+
+
+def with_row(text: str, values: dict[str, str]) -> str:
+    """Return `text` with one row added after the table's last row and every other byte unchanged.
+
+    `values` maps column names (case-insensitive; a name may be the start of a longer header, so
+    "linked prd" finds "Linked PRD Chapter / Day") to cell text. Columns not given stay blank.
+    """
+    table = parse(text)
+    cells = [""] * len(table.header)
+    for name, value in values.items():
+        if "\n" in value or "\r" in value:
+            raise BoardError("a cell value cannot contain a newline")
+        cells[_column(table.header, name)] = _BARE_PIPE.sub(lambda _m: "\\|", value)
+    key = cells[[h.lower() for h in table.header].index("key")]
+    if not key:
+        raise BoardError("a new row needs a key")
+    if any(row.key == key for row in table.rows):
+        raise BoardError(f"{key} is already on the board")
+    lines = text.split("\n")
+    eol = "\r" if lines[table.last_line].endswith("\r") else ""
+    lines.insert(table.last_line + 1, "| " + " | ".join(cells) + " |" + eol)
+    return "\n".join(lines)
+
+
 class Board:
     """A WORK-ITEMS.md file on disk, edited under a lock and replaced atomically."""
 
     def __init__(self, path: str | Path):
         self.path = Path(path)
         self._lock_path = self.path.with_name(f".{self.path.name}.lock")
+        self._held = False
 
     def _read(self) -> str:
         try:
@@ -187,16 +225,31 @@ class Board:
         try:
             os.write(fd, str(os.getpid()).encode())
             os.close(fd)
+            self._held = True
             yield
         finally:
+            self._held = False
             self._lock_path.unlink(missing_ok=True)
 
+    @contextlib.contextmanager
+    def _exclusive(self) -> Generator[None]:
+        """The lock, unless this caller already holds it (so edits can join a larger step)."""
+        if self._held:
+            yield
+        else:
+            with self.lock():
+                yield
+
     def set_cell(self, key: str, column: str, value: str, expected: str | None = None) -> None:
-        with self.lock():
+        with self._exclusive():
             text = self._read()
             new = with_cell(text, key, column, value, expected)
             if new != text:
                 self._write(new)
+
+    def add_row(self, values: dict[str, str]) -> None:
+        with self._exclusive():
+            self._write(with_row(self._read(), values))
 
     def _write(self, text: str) -> None:
         fd, tmp = tempfile.mkstemp(

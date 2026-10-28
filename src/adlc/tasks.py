@@ -166,6 +166,8 @@ def load_tasks(board: Path, briefs: Path) -> Loaded:
         loaded.states[row.key] = state
         if state is State.DONE:
             continue  # finished work needs no brief (older boards have none)
+        if state is State.DRAFT:
+            continue  # an idea: its brief is checked when it is promoted to BACKLOG
         path = Path(briefs) / f"{row.key}.md"
         if not path.is_file():
             loaded.rejections.append(Rejection(row.key, f"no brief at {path}"))
@@ -242,6 +244,29 @@ def select(loaded: Loaded) -> Selection:
             )
             chosen.waiting[task.key] = f"waiting on {held}"
     return chosen
+
+
+def next_priority(briefs: Path) -> int:
+    """One above the highest priority in any brief, so a new item goes to the back of the queue.
+
+    Reads leniently: a brief that is unfinished or malformed is skipped, not an error.
+    """
+    highest = 0
+    if Path(briefs).is_dir():
+        for path in Path(briefs).glob("*.md"):
+            try:
+                lines = path.read_bytes().decode("utf-8").split("\n")
+                end = next(i for i in range(1, len(lines)) if lines[i].rstrip() == "---")
+                value = (yaml.safe_load("\n".join(lines[1:end])) or {}).get("priority")
+            except (OSError, UnicodeDecodeError, StopIteration, yaml.YAMLError, AttributeError):
+                continue
+            if (
+                lines[0].rstrip() == "---"
+                and isinstance(value, int)
+                and not isinstance(value, bool)
+            ):
+                highest = max(highest, value)
+    return highest + 1
 
 
 def allocate_key(code: str, board: Path, briefs: Path) -> str:
