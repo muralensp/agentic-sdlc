@@ -6,8 +6,8 @@ Context code: `ADLC`. Milestones refer to PRD section 12.
 
 | Key | Context | Title | Status | Linked PRD Chapter / Day | Notes |
 |---|---|---|---|---|---|
-| ADLC-001 | ADLC (Tool) | Repository scaffold: git init, pyproject, pytest, ruff, CI, CLAUDE.md, .gitattributes, GLOSSARY.md | IN_REVIEW | Sec 9, 12 (M0); FR-37 | M0. Brief: docs/work-items/ADLC-001.md. Local checks green; CI workflow unverified until the remote exists (ADLC-002). |
-| ADLC-002 | ADLC (Tool) | Remote repository and branch protection via a wizard script | IN_REVIEW | FR-36, FR-41; M0 | M0. Brief: docs/work-items/ADLC-002.md. Wizard run on 2026-10-28; direct push to main rejected (GH006: changes must be made through a pull request; required check "CI passed" expected). Awaiting merge of the PR. |
+| ADLC-001 | ADLC (Tool) | Repository scaffold: git init, pyproject, pytest, ruff, CI, CLAUDE.md, .gitattributes, GLOSSARY.md | DONE | Sec 9, 12 (M0); FR-37 | M0. Brief: docs/work-items/ADLC-001.md. Local checks green; CI passed on PR #1 (2026-10-28). |
+| ADLC-002 | ADLC (Tool) | Remote repository and branch protection via a wizard script | DONE | FR-36, FR-41; M0 | M0. Brief: docs/work-items/ADLC-002.md. Wizard run on 2026-10-28; direct push to main rejected (GH006: changes must be made through a pull request; required check "CI passed" expected). Merged in PR #1. |
 | ADLC-003 | ADLC (Tool) | Method registry and `adlc doctor`: pinned skill version and hash check | Open | FR-31, FR-33, FR-34; decision 17 | M0. Brief: docs/work-items/ADLC-003.md |
 | ADLC-004 | ADLC (Tool) | `WORK-ITEMS.md` table parser and writer (Status and Notes cells only) | Open | FR-1, FR-4, FR-4a | M1. Brief: docs/work-items/ADLC-004.md |
 | ADLC-005 | ADLC (Tool) | Brief validator and task state machine | Open | FR-2, FR-3, FR-5 | M1. Brief: docs/work-items/ADLC-005.md |
