@@ -55,6 +55,7 @@ def env(tmp_path: Path):
     git(work, "push", "origin", "main")
     stub = tmp_path / "gh"
     stub.write_text(STUB_GH, newline="\n")
+    stub.chmod(0o755)
     log = tmp_path / "gh.log"
     return work, bare, stub, log
 
@@ -122,6 +123,7 @@ def test_rerun_creates_nothing_when_repo_exists(env):
 def test_requires_gh_login(env):
     stub = env[2]
     stub.write_text("#!/usr/bin/env bash\nexit 1\n", newline="\n")
+    stub.chmod(0o755)
     done = run(env, "--yes")
     assert done.returncode == 1
     assert "gh auth login" in done.stderr
