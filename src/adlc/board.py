@@ -10,7 +10,7 @@ import os
 import re
 import shutil
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Generator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -172,7 +172,7 @@ class Board:
         return list(parse(self._read()).rows)
 
     @contextlib.contextmanager
-    def lock(self) -> Iterator[None]:
+    def lock(self) -> Generator[None]:
         """Take the writer lock or fail at once. A leftover lock is reported, never removed."""
         try:
             fd = os.open(self._lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
