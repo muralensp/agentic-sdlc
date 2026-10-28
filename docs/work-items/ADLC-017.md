@@ -17,3 +17,5 @@ requires_approval: false
 - A stuck loop gets one diagnosis iteration and the report is attached to the escalation
 - `bugfix` tasks start with a reproducing test
 - No second diagnosis iteration is ever started for the same stuck signature
+
+**Re-scope (decision 21):** The diagnosis iteration invokes the pinned `diagnosing-bugs` skill from the driver; no diagnosis logic in Python.

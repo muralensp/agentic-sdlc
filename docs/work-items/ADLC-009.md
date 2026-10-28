@@ -17,3 +17,5 @@ requires_approval: false
 - Each stage in 7.3 resolves to a method or its fallback
 - The run log records method name and version for every stage
 - A skill cannot widen `AGENTS.md` permissions (a test proves a skill-suggested out-of-scope edit is refused)
+
+**Re-scope (decision 21):** Methods are skills pinned by `doctor`; the driver selects the skill per stage and logs method and version. No prompt-assembly engine beyond the fallback files.

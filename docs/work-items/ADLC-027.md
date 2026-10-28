@@ -17,3 +17,5 @@ requires_approval: true
 - Edits outside allowed paths and forbidden commands are blocked by the orchestrator and escalate
 - Secrets and configured PII patterns never appear in prompts or logs (tests with planted values)
 - Agents run with no network beyond the model API
+
+**Re-scope (decision 21):** Guardrails are enforced twice: by `PreToolUse` hooks and `permissions.deny` rules (ADLC-033), and by the driver re-checking the diff after every iteration. Scrubbing stays in the driver.

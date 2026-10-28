@@ -17,3 +17,5 @@ requires_approval: false
 - The orchestrator's tests run end to end with the fake client and no network
 - The Claude Code adapter selects the model per role (Coder, Tester, Reviewer, PR writer) and refuses a Reviewer model equal to the Coder's
 - Rate-limit errors from the adapter are surfaced as a distinct signal (used by ADLC-022)
+
+**Re-scope (decision 21):** Shrinks to a thin `claude -p` invoker (fresh context per call, role name, model, timeout, rate-limit signal) plus the fake client. Roles themselves are subagent files from ADLC-033.
