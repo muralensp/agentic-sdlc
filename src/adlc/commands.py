@@ -63,7 +63,7 @@ def _cell(row: Row, name: str) -> str:
     return next((v for k, v in row.cells.items() if k.lower() == name), "").replace("\\|", "|")
 
 
-def _locations(repo: Path) -> tuple[Path, Path, str]:
+def locations(repo: Path) -> tuple[Path, Path, str]:
     settings = load_config(repo)
     briefs = settings.board.briefs.strip("/")
     return repo / settings.board.path, repo / briefs, briefs
@@ -108,7 +108,7 @@ def add_item(
     if bad:
         raise CommandError(f"depends: {', '.join(bad)} is not of the form CODE-123")
 
-    board_path, briefs, briefs_rel = _locations(repo)
+    board_path, briefs, briefs_rel = locations(repo)
     board = Board(board_path)
     with board.lock():
         rows = board.rows()
@@ -153,7 +153,7 @@ def add_item(
 
 def status_report(repo: Path) -> dict:
     """Every board item with its state, group and reason, plus the items with problems."""
-    board_path, briefs, _ = _locations(repo)
+    board_path, briefs, _ = locations(repo)
     rows = Board(board_path).rows()
     loaded = load_tasks(board_path, briefs)
     chosen = select(loaded)
@@ -263,7 +263,7 @@ def render_status(report: dict, *, repo: Path, all_items: bool) -> str:
 
 def read_log(repo: Path, key: str, run: int | None = None) -> str:
     """The summary of the newest run of `key` (or of run number `run`)."""
-    board_path, _, _ = _locations(repo)
+    board_path, _, _ = locations(repo)
     if key not in {r.key for r in Board(board_path).rows()}:
         raise CommandError(f"no work item {key!r} on the board")
     if run is None:

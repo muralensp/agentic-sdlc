@@ -357,3 +357,21 @@ def test_next_priority_is_one_above_the_highest_in_any_brief(tmp_path):
     (folder / "T-004.md").write_text("---\npriority: many\n---\n")
     (folder / "notes.txt").write_text("---\npriority: 50\n---\n")
     assert next_priority(folder) == 10
+
+
+def test_include_drafts_validates_draft_items_like_backlog(tmp_path):
+    rows = [("T-001", "DRAFT"), ("T-002", "DRAFT"), ("T-003", "DRAFT")]
+    briefs = {"T-001": spec("T-001"), "T-002": "---\nkey: T-002\n---\n"}
+    board, folder = make_repo(tmp_path, rows, briefs)
+    loaded = load_tasks(board, folder, include_drafts=True)
+    assert sorted(r.key for r in loaded.rejections) == ["T-002", "T-003"]
+    assert list(loaded.tasks) == ["T-001"] and loaded.tasks["T-001"].state is State.DRAFT
+    assert select(loaded).ready == []  # still never selectable
+
+
+def test_include_drafts_catches_unknown_dependencies(tmp_path):
+    board, folder = make_repo(
+        tmp_path, [("T-001", "DRAFT")], {"T-001": spec("T-001", deps="[T-099]")}
+    )
+    loaded = load_tasks(board, folder, include_drafts=True)
+    assert "unknown key T-099" in loaded.rejections[0].reason
