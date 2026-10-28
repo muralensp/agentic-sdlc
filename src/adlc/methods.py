@@ -8,6 +8,7 @@ import hashlib
 import os
 import re
 from dataclasses import dataclass
+from importlib import resources
 from pathlib import Path
 
 import yaml
@@ -164,37 +165,56 @@ def _find(method: Method, repo: Path, roots: list[Path]) -> list[Path]:
     ]
 
 
+def fallback_text(repo: Path, skill: str) -> tuple[str, str] | None:
+    """The fallback prompt for `skill` and where it came from ("repo" or "adlc"), or None.
+
+    A repo's own `.adlc/methods/<skill>.md` wins over the one packaged with ADLC.
+    """
+    own = repo / ".adlc" / "methods" / f"{skill}.md"
+    if own.is_file():
+        return own.read_bytes().decode("utf-8"), "repo"
+    packaged = resources.files("adlc") / "fallbacks" / f"{skill}.md"
+    if _SKILL_NAME.match(skill) and packaged.is_file():
+        return packaged.read_text(encoding="utf-8"), "adlc"
+    return None
+
+
+def _check_method(
+    method: Method, repo: Path, roots: list[Path], note: str
+) -> tuple[Result, Path | None]:
+    fallback = fallback_text(repo, method.skill) is not None
+    found = _find(method, repo, roots)
+    if not found:
+        detail = note if method.source == "plugin" else "no project skill of that name"
+        return Result(
+            method.stage, method.skill, "missing", method.required, fallback, detail
+        ), None
+    if len(found) > 1:
+        where = ", ".join(str(p) for p in found)
+        return Result(
+            method.stage, method.skill, "ambiguous", method.required, fallback, where
+        ), None
+    actual = dir_hash(found[0])
+    if method.sha256 is None:
+        status, detail = "unpinned", f"sha256 is {actual}"
+    elif method.sha256 != actual:
+        status, detail = "hash mismatch", f"pinned {method.sha256[:12]}, found {actual[:12]}"
+    else:
+        status, detail = "available", ""
+    return Result(method.stage, method.skill, status, method.required, fallback, detail), found[0]
+
+
 def check(registry: Registry, repo: Path, skills_root: Path | None = None) -> list[Result]:
     roots, note = _plugin_roots(registry, skills_root)
-    results = []
-    for method in registry.values():
-        fallback = (repo / ".adlc" / "methods" / f"{method.skill}.md").is_file()
-        found = _find(method, repo, roots)
-        if not found:
-            detail = note if method.source == "plugin" else "no project skill of that name"
-            results.append(
-                Result(method.stage, method.skill, "missing", method.required, fallback, detail)
-            )
-        elif len(found) > 1:
-            where = ", ".join(str(p) for p in found)
-            results.append(
-                Result(method.stage, method.skill, "ambiguous", method.required, fallback, where)
-            )
-        else:
-            actual = dir_hash(found[0])
-            if method.sha256 is None:
-                status, detail = "unpinned", f"sha256 is {actual}"
-            elif method.sha256 != actual:
-                status, detail = (
-                    "hash mismatch",
-                    f"pinned {method.sha256[:12]}, found {actual[:12]}",
-                )
-            else:
-                status, detail = "available", ""
-            results.append(
-                Result(method.stage, method.skill, status, method.required, fallback, detail)
-            )
-    return results
+    return [_check_method(m, repo, roots, note)[0] for m in registry.values()]
+
+
+def inspect(
+    registry: Registry, repo: Path, stage: str, skills_root: Path | None = None
+) -> tuple[Result, Path | None]:
+    """The check result for one stage, and the skill folder when exactly one was found."""
+    roots, note = _plugin_roots(registry, skills_root)
+    return _check_method(registry[stage], repo, roots, note)
 
 
 def pins_yaml(registry: Registry, repo: Path, skills_root: Path | None = None) -> str:
