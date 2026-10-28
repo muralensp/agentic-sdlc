@@ -51,4 +51,4 @@ detail belongs in `PRD.md`, `docs/WORK-ITEM-WALKTHROUGH.md`, and the run logs. M
 
 ## Status
 
-ADLC-001 (repository scaffold) is IN_REVIEW: local checks green, CI to be verified once ADLC-002 creates the remote. See `docs/WORK-ITEMS.md` for the rest.
+ADLC-001 (scaffold) and ADLC-002 (remote and branch protection) are DONE; `main` is protected. Next: ADLC-003. See `docs/WORK-ITEMS.md` for the rest.
