@@ -95,6 +95,8 @@ def resolve(
     reason = ""
     if runner != CLAUDE_CODE:
         reason = f"runner {runner!r} is not Claude Code"
+    elif result.status == "ambiguous" and method.sha256 is None:
+        reason = f"skill {method.skill} is ambiguous and not pinned"
     elif result.status in ("hash mismatch", "ambiguous"):
         raise MethodRefused(
             f"stage {stage!r}: skill {method.skill} is {result.status} ({result.detail}); "

@@ -147,8 +147,12 @@ def _cell(cells: dict[str, str], name: str) -> str:
     return next((v for k, v in cells.items() if k.lower() == name), "")
 
 
-def load_tasks(board: Path, briefs: Path) -> Loaded:
-    """Join every board row with its brief. Bad items are rejected; the rest still load."""
+def load_tasks(board: Path, briefs: Path, include_drafts: bool = False) -> Loaded:
+    """Join every board row with its brief. Bad items are rejected; the rest still load.
+
+    DRAFT items are ideas and skip the brief checks unless `include_drafts` asks for them, as
+    when a person is about to promote one to BACKLOG.
+    """
     rows = Board(board).rows()
     known = {row.key for row in rows}
     loaded = Loaded({}, {}, [])
@@ -166,7 +170,7 @@ def load_tasks(board: Path, briefs: Path) -> Loaded:
         loaded.states[row.key] = state
         if state is State.DONE:
             continue  # finished work needs no brief (older boards have none)
-        if state is State.DRAFT:
+        if state is State.DRAFT and not include_drafts:
             continue  # an idea: its brief is checked when it is promoted to BACKLOG
         path = Path(briefs) / f"{row.key}.md"
         if not path.is_file():

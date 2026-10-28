@@ -253,3 +253,10 @@ def test_crlf_and_bom_in_a_skill_do_not_leak_front_matter(repo, skills):
     configure(repo, skills)
     text = run(repo, "implement").text
     assert "REAL" in text and "allowed-tools" not in text and chr(13) not in text
+
+
+def test_a_duplicated_skill_with_no_pin_falls_back_instead_of_refusing(repo, skills):
+    configure(repo, skills, pinned=False)
+    make_skill(skills, "tdd", "other copy" + chr(10), group="h")
+    got = run(repo, "implement")
+    assert got.source == "fallback" and "ambiguous" in got.reason and "not pinned" in got.reason

@@ -11,6 +11,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from adlc import __version__
+from adlc import refine as refine_module
 from adlc.board import BoardError
 from adlc.commands import (
     CommandError,
@@ -53,7 +54,13 @@ def build_parser() -> argparse.ArgumentParser:
     log = commands.add_parser("log", help="print the latest run summary of an item")
     log.add_argument("key")
     log.add_argument("--run", type=int, help="a specific run number (default: the newest)")
-    for command in (add, status, log):
+    refine = commands.add_parser(
+        "refine", help="grill an idea or DRAFT item into a ready brief (a person must be present)"
+    )
+    refine.add_argument("target", help="a work item key, or the text of a new idea")
+    refine.add_argument("--code", help="context code for a new idea (default: board.code)")
+    refine.add_argument("--new-code", action="store_true", help="allow a code with no items yet")
+    for command in (add, status, log, refine):
         command.add_argument("--repo", type=Path, help="default: the repository around this folder")
     return parser
 
@@ -114,7 +121,12 @@ def _log(args: argparse.Namespace, repo: Path) -> int:
     return 0
 
 
-_BOARD_COMMANDS = {"add": _add, "status": _status, "log": _log}
+def _refine(args: argparse.Namespace, repo: Path) -> int:
+    refine_module.refine(repo, args.target, code=args.code, new_code=args.new_code)
+    return 0
+
+
+_BOARD_COMMANDS = {"add": _add, "status": _status, "log": _log, "refine": _refine}
 
 
 def run_board_command(args: argparse.Namespace) -> int:
