@@ -98,8 +98,13 @@ def load_registry(config: Path | None) -> Registry:
         except (OSError, yaml.YAMLError) as exc:
             raise MethodsError(f"cannot read config {config}: {exc}") from exc
         block = data.get("methods") or {}
-        if not isinstance(block, dict):
-            raise MethodsError("config: `methods` must be a mapping")
+    return build_registry(block)
+
+
+def build_registry(block: object) -> Registry:
+    """Build the registry from an already-parsed `methods:` block (defaults fill the gaps)."""
+    if not isinstance(block, dict):
+        raise MethodsError("config: `methods` must be a mapping")
     registry = Registry()
     registry.plugin = str(block.get("plugin") or PLUGIN)
     registry.version = str(block["version"]) if block.get("version") else None

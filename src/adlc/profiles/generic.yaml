@@ -1,0 +1,50 @@
+# The built-in base profile: safe defaults that apply to every project (PRD 2b, FR-41).
+# Stack profiles (dotnet, python) extend this one and add their own commands.
+
+board:
+  path: docs/WORK-ITEMS.md
+  briefs: docs/work-items
+  code: null          # context code used for new keys, e.g. PLAT; null until chosen
+
+git:
+  base_branch: main
+  branch_prefixes: [feature, bugfix, hotfix, refactor, spike, docs, test]
+  commit_convention: conventional
+
+limits:
+  max_iterations: 5
+  max_review_rounds: 2
+  max_diff_lines: 400        # production code; the hard ceiling counts tests too
+  max_diff_lines_hard: 800
+  max_task_minutes: 30
+  max_cost_usd: null         # only meaningful with an API key
+  max_tasks_per_window: 3    # Claude Code Pro usage window
+
+models:                      # unset: the runner's default; reviewer must differ from coder
+  coder: null
+  tester: null
+  reviewer: null
+  pr_writer: null
+
+dod: {}                      # name: command, filled in by a stack profile
+
+protected:                   # globs that always escalate (FR-41); a stack profile adds to these
+  - ".github/**"
+  - ".adlc/**"
+  - "**/pyproject.toml"
+  - "**/package.json"
+  - "**/package-lock.json"
+  - "**/requirements*.txt"
+  - "**/*.csproj"
+  - "**/migrations/**"
+  - "**/.env"
+  - "**/.env.*"
+  - "**/*.pem"
+protected_extra: []
+
+merge:
+  auto_merge: false          # a profile may not turn this on; adlc trust does, per repo
+  required_checks: []
+  method: squash
+
+methods: {}
