@@ -12,6 +12,7 @@ from pathlib import Path
 
 from adlc import __version__
 from adlc import refine as refine_module
+from adlc.baseline import STORE, take_baseline
 from adlc.board import BoardError
 from adlc.commands import (
     CommandError,
@@ -21,7 +22,7 @@ from adlc.commands import (
     render_status,
     status_report,
 )
-from adlc.config import ConfigError
+from adlc.config import ConfigError, load_config
 from adlc.methods import MethodsError, check, load_registry, pins_yaml
 from adlc.tasks import TYPES
 
@@ -39,6 +40,19 @@ def build_parser() -> argparse.ArgumentParser:
     doctor.add_argument("--skills-root", type=Path, help="where plugin skills are installed")
     doctor.add_argument(
         "--print-pins", action="store_true", help="print a methods block with current hashes"
+    )
+    doctor.add_argument(
+        "--baseline",
+        action="store_true",
+        help="run the profile's Definition of Done commands once and save the result",
+    )
+    doctor.add_argument("--only", action="append", default=[], metavar="NAME", help="repeatable")
+    doctor.add_argument("--skip", action="append", default=[], metavar="NAME", help="repeatable")
+    doctor.add_argument(
+        "--timeout", type=float, default=20, metavar="MINUTES", help="per command (default 20)"
+    )
+    doctor.add_argument(
+        "--allow-dirty", action="store_true", help="baseline even with uncommitted changes"
     )
     add = commands.add_parser("add", help="add a DRAFT work item and its brief skeleton")
     add.add_argument("code", help="context code, e.g. PLAT")
@@ -65,7 +79,43 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def run_baseline(args: argparse.Namespace) -> int:
+    try:
+        baseline = take_baseline(
+            args.repo,
+            load_config(args.repo),
+            timeout=args.timeout * 60,
+            only=args.only,
+            skip=args.skip,
+            allow_dirty=args.allow_dirty,
+            progress=lambda name: print(f"running {name} ...", flush=True),
+        )
+    except CommandError as exc:
+        print(f"adlc doctor: {exc}", file=sys.stderr)
+        return 1
+    except ConfigError as exc:
+        print("adlc doctor: invalid configuration", file=sys.stderr)
+        for problem in exc.problems:
+            print(f"adlc doctor:   {problem}", file=sys.stderr)
+        return 2
+    print(f"\n{'NAME':<18}{'STATUS':<10}{'EXIT':<7}{'SECONDS':<9}NOTE")
+    for c in baseline.commands:
+        note = (
+            "flaky: passed on the retry" if c.flaky else "retried once" if c.attempts == 2 else ""
+        )
+        exit_code = "" if c.exit_code is None else str(c.exit_code)
+        print(f"{c.name:<18}{c.status:<10}{exit_code:<7}{c.duration:<9.1f}{note}")
+    ran = [c for c in baseline.commands if c.status != "skipped"]
+    passed = [c for c in ran if c.status == "pass"]
+    print(
+        f"\n{len(passed)} of {len(ran)} passed; baseline saved to {STORE.as_posix()}/baseline.json"
+    )
+    return 0 if len(passed) == len(ran) else 1
+
+
 def run_doctor(args: argparse.Namespace) -> int:
+    if args.baseline:
+        return run_baseline(args)
     config = args.config or args.repo / ".adlc" / "config.yaml"
     try:
         registry = load_registry(config)
