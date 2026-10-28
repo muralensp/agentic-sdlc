@@ -4,11 +4,11 @@
 # These steps need a person (GitHub account, admin rights), so they are a wizard, not prose.
 # Every step prints what it will do, asks first, and checks the result. Safe to re-run.
 #
-# Usage: .adlc/wizards/protect-main.sh [--dry-run] [--yes] [--repo OWNER/NAME] [--public]
+# Usage: .adlc/wizards/protect-main.sh [--dry-run] [--yes] [--repo OWNER/NAME] [--private]
 #   --dry-run  print the plan and make no change (read-only gh calls only)
 #   --yes      do not ask before each step (still prints each step)
 #   --repo     OWNER/NAME of the remote (default: <your login>/<this folder's name>)
-#   --public   create the repo as public (default private)
+#   --private  create the repo as private (default public)
 #
 # Environment: ADLC_GH overrides the gh command (used by the tests).
 
@@ -20,15 +20,15 @@ BRANCH="main"
 DRY=0
 YES=0
 REPO=""
-VIS="private"
+VIS="public"
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY=1 ;;
     --yes) YES=1 ;;
-    --public) VIS="public" ;;
+    --private) VIS="private" ;;
     --repo) shift; REPO="${1:-}" ;;
-    -h | --help) sed -n '2,15p' "$0"; exit 0 ;;
+    -h | --help) sed -n '2,14p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
   shift
@@ -93,7 +93,7 @@ say "rules: pull request required, check '$CHECK' must pass and be up to date,"
 say "       applies to administrators, no force push, no deletion"
 if confirm "PUT repos/$REPO/branches/$BRANCH/protection"; then
   printf '%s' "$BODY" | "$GH" api -X PUT "repos/$REPO/branches/$BRANCH/protection" --input - >/dev/null \
-    || die "GitHub refused. Private repos need GitHub Pro/Team for branch protection; rerun with --public or upgrade."
+    || die "GitHub refused. Private repos need GitHub Pro/Team for branch protection; rerun without --private or upgrade."
 fi
 
 step "5. Verify the rules are in force"

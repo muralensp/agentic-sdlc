@@ -87,7 +87,7 @@ def test_script_is_valid_bash():
 def test_dry_run_changes_nothing(env):
     done = run(env, "--dry-run", STUB_REPO_EXISTS="0")
     assert done.returncode == 0, done.stdout + done.stderr
-    assert "will do: gh repo create tester/work --private" in done.stdout
+    assert "will do: gh repo create tester/work --public" in done.stdout
     assert mutating_calls(env[3]) == []
 
 
