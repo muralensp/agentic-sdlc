@@ -8,9 +8,9 @@ Context code: `ADLC`. Milestones refer to PRD section 12.
 |---|---|---|---|---|---|
 | ADLC-001 | ADLC (Tool) | Repository scaffold: git init, pyproject, pytest, ruff, CI, CLAUDE.md, .gitattributes, GLOSSARY.md | DONE | Sec 9, 12 (M0); FR-37 | M0. Brief: docs/work-items/ADLC-001.md. Local checks green; CI passed on PR #1 (2026-10-28). |
 | ADLC-002 | ADLC (Tool) | Remote repository and branch protection via a wizard script | DONE | FR-36, FR-41; M0 | M0. Brief: docs/work-items/ADLC-002.md. Wizard run on 2026-10-28; direct push to main rejected (GH006: changes must be made through a pull request; required check "CI passed" expected). Merged in PR #1. |
-| ADLC-003 | ADLC (Tool) | Method registry and `adlc doctor`: pinned skill version and hash check | IN_REVIEW | FR-31, FR-33, FR-34; decision 17 | M0. Brief: docs/work-items/ADLC-003.md Built and tested; doctor passes 12 of 12 against the installed mattpocock-skills 1.3.1. Awaiting PR merge. |
+| ADLC-003 | ADLC (Tool) | Method registry and `adlc doctor`: pinned skill version and hash check | DONE | FR-31, FR-33, FR-34; decision 17 | M0. Brief: docs/work-items/ADLC-003.md Built and tested; doctor passes 12 of 12 against the installed mattpocock-skills 1.3.1. Awaiting PR merge. Merged in PR #7. |
 | ADLC-004 | ADLC (Tool) | `WORK-ITEMS.md` table parser and writer (Status and Notes cells only) | DONE | FR-1, FR-4, FR-4a | M1. Brief: docs/work-items/ADLC-004.md. Merged in PR #3; BOSS NextGen's real board round-trips byte for byte (local check). |
-| ADLC-005 | ADLC (Tool) | Brief validator and task state machine | Open | FR-2, FR-3, FR-5 | M1. Brief: docs/work-items/ADLC-005.md |
+| ADLC-005 | ADLC (Tool) | Brief validator and task state machine | IN_REVIEW | FR-2, FR-3, FR-5 | M1. Brief: docs/work-items/ADLC-005.md Built and tested; all 33 briefs on this board validate. Awaiting PR merge. |
 | ADLC-006 | ADLC (Tool) | Config and profile loader (`config.yaml` extends a profile) | Open | FR-39, FR-20, FR-22 | M1. Brief: docs/work-items/ADLC-006.md |
 | ADLC-007 | ADLC (Tool) | CLI skeleton: `adlc add`, `adlc status`, `adlc log` | Open | FR-5, FR-19, FR-27 | M1. Brief: docs/work-items/ADLC-007.md |
 | ADLC-008 | ADLC (Tool) | Stack profiles: `dotnet` (from BOSS NextGen) and `python` | Open | FR-39; Sec 13.1, 13.2 | M2a. Brief: docs/work-items/ADLC-008.md |
@@ -37,5 +37,5 @@ Context code: `ADLC`. Milestones refer to PRD section 12.
 | ADLC-029 | ADLC (Tool) | Acceptance pilot on BOSS NextGen | Open | Sec 11; 13.1 | M4. Brief: docs/work-items/ADLC-029.md |
 | ADLC-030 | ADLC (Tool) | Regenerate the PRD `.docx` from `PRD.md` | Open | Decision 10 | M4. Brief: docs/work-items/ADLC-030.md |
 | ADLC-031 | ADLC (Tool) | Parallel workers (deferred, not scheduled) | Open | 7.2; M5 | M5. Brief: docs/work-items/ADLC-031.md |
-| ADLC-032 | ADLC (Tool) | Substrate prototype: `claude -p`, Stop hook, PreToolUse hook | IN_REVIEW | Decision 21 | M2a. Brief: docs/work-items/ADLC-032.md. Added by decision 21. Findings: docs/research/claude-code-substrate.md. Hooks work for file tools; Bash bypasses them, so the driver must re-check the diff. |
+| ADLC-032 | ADLC (Tool) | Substrate prototype: `claude -p`, Stop hook, PreToolUse hook | DONE | Decision 21 | M2a. Brief: docs/work-items/ADLC-032.md. Added by decision 21. Findings: docs/research/claude-code-substrate.md. Hooks work for file tools; Bash bypasses them, so the driver must re-check the diff. Merged in PR #6. |
 | ADLC-033 | ADLC (Tool) | Claude Code assets package: subagents, hooks, deny rules | Open | Decision 21; FR-15, FR-22 | M2a. Brief: docs/work-items/ADLC-033.md. Added by decision 21. |
