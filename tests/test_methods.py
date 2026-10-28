@@ -227,15 +227,27 @@ def test_doctor_fails_on_unpinned_skills(repo, skills):
 
 def test_doctor_tolerates_a_missing_optional_skill_but_not_a_required_one(repo, skills):
     config = pinned_config(repo, skills)
-    for name in ("research", "tdd"):
-        folder = skills / "g" / name
-        (folder / "SKILL.md").unlink()
-        folder.rmdir()
+    data = yaml.safe_load(config.read_text())
+    data["methods"]["stages"]["implement"] = {"skill": "custom-tdd", "sha256": None}
+    config.write_text(yaml.safe_dump(data))
+    folder = skills / "g" / "research"
+    (folder / "SKILL.md").unlink()
+    folder.rmdir()
     code = doctor(repo, config, skills)
-    assert code == 1  # tdd is required and has no fallback
+    assert code == 1  # custom-tdd is required and has no fallback
     (repo / ".adlc" / "methods").mkdir()
-    (repo / ".adlc" / "methods" / "tdd.md").write_text("fallback\n")
-    assert doctor(repo, config, skills) == 0  # research is optional, tdd has a fallback
+    (repo / ".adlc" / "methods" / "custom-tdd.md").write_text("fallback" + chr(10))
+    assert doctor(repo, config, skills) == 0  # research is optional, custom-tdd has a fallback
+
+
+def test_a_missing_default_skill_is_covered_by_the_packaged_fallback(repo, skills):
+    config = pinned_config(repo, skills)
+    folder = skills / "g" / "tdd"
+    (folder / "SKILL.md").unlink()
+    folder.rmdir()
+    result = statuses(repo, skills, config)["implement"]
+    assert (result.status, result.fallback) == ("missing", True)
+    assert doctor(repo, config, skills) == 0
 
 
 def test_print_pins_round_trips_into_a_passing_config(repo, skills, capsys):
