@@ -18,3 +18,5 @@ requires_approval: false
 - Auto-merge requires Reviewer approval, all DoD green, required remote checks green and no open trigger, then squash or rebase and cleanup
 - A red check, missing approval or open trigger prevents merge (tests for each)
 - Nothing is deployed
+
+**Re-scope (decision 21):** The PR text is written by the pinned `pr` skill via the PR-writer role; the driver does push, `gh pr create`, check polling and auto-merge.

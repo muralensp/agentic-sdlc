@@ -17,3 +17,5 @@ requires_approval: false
 - Returns approve, changes-requested or escalate with findings listed per axis
 - Gates 1 to 3 per PR as confirmed; Gate 4 is Not Applicable until a frontend exists; Gate 5 is never run by ADLC
 - Changes-requested feeds back into the loop for at most `max_review_rounds`
+
+**Re-scope (decision 21):** The Reviewer is a subagent on a different model (ADLC-033). The driver supplies the diff, parses the verdict and enforces `max_review_rounds`.

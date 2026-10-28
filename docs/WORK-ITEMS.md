@@ -14,26 +14,28 @@ Context code: `ADLC`. Milestones refer to PRD section 12.
 | ADLC-006 | ADLC (Tool) | Config and profile loader (`config.yaml` extends a profile) | Open | FR-39, FR-20, FR-22 | M1. Brief: docs/work-items/ADLC-006.md |
 | ADLC-007 | ADLC (Tool) | CLI skeleton: `adlc add`, `adlc status`, `adlc log` | Open | FR-5, FR-19, FR-27 | M1. Brief: docs/work-items/ADLC-007.md |
 | ADLC-008 | ADLC (Tool) | Stack profiles: `dotnet` (from BOSS NextGen) and `python` | Open | FR-39; Sec 13.1, 13.2 | M2a. Brief: docs/work-items/ADLC-008.md |
-| ADLC-009 | ADLC (Tool) | Method injection per stage, fallback prompts, method/version logging | Open | FR-31, FR-32, FR-34 | M2a. Brief: docs/work-items/ADLC-009.md |
-| ADLC-010 | ADLC (Tool) | `adlc refine`: grilling interview that produces a ready brief | Open | FR-30, FR-38; decision 19 | M2a. Brief: docs/work-items/ADLC-010.md |
+| ADLC-009 | ADLC (Tool) | Method injection per stage, fallback prompts, method/version logging | Open | FR-31, FR-32, FR-34 | M2a. Brief: docs/work-items/ADLC-009.md Re-scoped by decision 21. |
+| ADLC-010 | ADLC (Tool) | `adlc refine`: grilling interview that produces a ready brief | Open | FR-30, FR-38; decision 19 | M2a. Brief: docs/work-items/ADLC-010.md Re-scoped by decision 21. |
 | ADLC-011 | ADLC (Tool) | `adlc doctor` baseline: run the profile's DoD commands once on the unmodified repo | Open | FR-29 (last bullet) | M2a. Brief: docs/work-items/ADLC-011.md |
-| ADLC-012 | ADLC (Tool) | Agent-runner interface, Claude Code adapter, fake client | Open | FR-22; Sec 9 Testability | M2. Brief: docs/work-items/ADLC-012.md |
+| ADLC-012 | ADLC (Tool) | Agent-runner interface, Claude Code adapter, fake client | Open | FR-22; Sec 9 Testability | M2. Brief: docs/work-items/ADLC-012.md Re-scoped by decision 21. |
 | ADLC-013 | ADLC (Tool) | Git worktree handling, branch naming, Conventional Commit check | Open | FR-7, FR-10b; decision 3 | M2. Brief: docs/work-items/ADLC-013.md |
 | ADLC-014 | ADLC (Tool) | DoD command runner: unpiped exit codes, saved output, baseline comparison | Open | FR-10, FR-10a | M2. Brief: docs/work-items/ADLC-014.md |
-| ADLC-015 | ADLC (Tool) | Tester red phase and test protection | Open | FR-8, FR-9g | M2. Brief: docs/work-items/ADLC-015.md |
+| ADLC-015 | ADLC (Tool) | Tester red phase and test protection | Open | FR-8, FR-9g | M2. Brief: docs/work-items/ADLC-015.md Re-scoped by decision 21. |
 | ADLC-016 | ADLC (Tool) | Ralph loop controller | Open | FR-9, FR-9a to FR-9h; 8.2a | M2. Brief: docs/work-items/ADLC-016.md |
-| ADLC-017 | ADLC (Tool) | Diagnosis iteration for stuck loops and bugfix tasks | Open | FR-32; `diagnosing-bugs` | M2. Brief: docs/work-items/ADLC-017.md |
+| ADLC-017 | ADLC (Tool) | Diagnosis iteration for stuck loops and bugfix tasks | Open | FR-32; `diagnosing-bugs` | M2. Brief: docs/work-items/ADLC-017.md Re-scoped by decision 21. |
 | ADLC-018 | ADLC (Tool) | Run logs, usage measurement, `--dry-run`, `adlc loop-status` | Open | FR-18, FR-9h, FR-21 | M2. Brief: docs/work-items/ADLC-018.md |
-| ADLC-019 | ADLC (Tool) | Reviewer agent: two-axis code review and gate checklists | Open | FR-32, 7.1 (gates); decision 8 | M2b. Brief: docs/work-items/ADLC-019.md |
+| ADLC-019 | ADLC (Tool) | Reviewer agent: two-axis code review and gate checklists | Open | FR-32, 7.1 (gates); decision 8 | M2b. Brief: docs/work-items/ADLC-019.md Re-scoped by decision 21. |
 | ADLC-020 | ADLC (Tool) | Escalation engine, `NEEDS_HUMAN` queue and approve/retry/edit/reject | Open | FR-23 to FR-26, FR-27; 8.4a | M2b. Brief: docs/work-items/ADLC-020.md |
-| ADLC-021 | ADLC (Tool) | PR step: push, PR body, template fill, auto-merge, cleanup | Open | FR-11, FR-12, FR-12a; `pr` | M3. Brief: docs/work-items/ADLC-021.md |
+| ADLC-021 | ADLC (Tool) | PR step: push, PR body, template fill, auto-merge, cleanup | Open | FR-11, FR-12, FR-12a; `pr` | M3. Brief: docs/work-items/ADLC-021.md Re-scoped by decision 21. |
 | ADLC-022 | ADLC (Tool) | Resume, reset, usage-window pause, handoff, report | Open | FR-13, FR-9i, FR-18b, FR-26 | M3. Brief: docs/work-items/ADLC-022.md |
 | ADLC-023 | ADLC (Tool) | Spike tasks: `research` and `prototype` | Open | FR-35 | M3. Brief: docs/work-items/ADLC-023.md |
 | ADLC-024 | ADLC (Tool) | `adlc init`: adopt an existing repository | Open | FR-29, FR-39; decision 12 | M3b. Brief: docs/work-items/ADLC-024.md |
 | ADLC-025 | ADLC (Tool) | `adlc new`: scaffold a fresh repository from templates | Open | FR-29, FR-40; decision 12 | M3b. Brief: docs/work-items/ADLC-025.md |
 | ADLC-026 | ADLC (Tool) | Safe defaults for new repos and `adlc trust` | Open | FR-41; decisions 18, 20 | M3b. Brief: docs/work-items/ADLC-026.md |
-| ADLC-027 | ADLC (Tool) | Guardrail enforcement and secret/PII scrubbing | Open | FR-15, FR-16, FR-17 | M4. Brief: docs/work-items/ADLC-027.md |
+| ADLC-027 | ADLC (Tool) | Guardrail enforcement and secret/PII scrubbing | Open | FR-15, FR-16, FR-17 | M4. Brief: docs/work-items/ADLC-027.md Re-scoped by decision 21. |
 | ADLC-028 | ADLC (Tool) | Prompt-injection review, skill supply-chain checks, index-size warning | Open | FR-17, FR-33, FR-37 | M4. Brief: docs/work-items/ADLC-028.md |
 | ADLC-029 | ADLC (Tool) | Acceptance pilot on BOSS NextGen | Open | Sec 11; 13.1 | M4. Brief: docs/work-items/ADLC-029.md |
 | ADLC-030 | ADLC (Tool) | Regenerate the PRD `.docx` from `PRD.md` | Open | Decision 10 | M4. Brief: docs/work-items/ADLC-030.md |
 | ADLC-031 | ADLC (Tool) | Parallel workers (deferred, not scheduled) | Open | 7.2; M5 | M5. Brief: docs/work-items/ADLC-031.md |
+| ADLC-032 | ADLC (Tool) | Substrate prototype: `claude -p`, Stop hook, PreToolUse hook | Open | Decision 21 | M2a. Brief: docs/work-items/ADLC-032.md. Added by decision 21. |
+| ADLC-033 | ADLC (Tool) | Claude Code assets package: subagents, hooks, deny rules | Open | Decision 21; FR-15, FR-22 | M2a. Brief: docs/work-items/ADLC-033.md. Added by decision 21. |

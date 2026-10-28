@@ -18,3 +18,5 @@ requires_approval: true
 - Asks in numbered rounds with a recommended answer each, and ends only when the person confirms shared understanding
 - Writes row and brief; the validator passes before the item becomes `BACKLOG`
 - Proposes (never writes) ADR and glossary entries for the person to accept or reject
+
+**Re-scope (decision 21):** `adlc refine` becomes a thin launcher for an interactive Claude Code session that runs the pinned grilling skill; the driver validates the brief it produces.

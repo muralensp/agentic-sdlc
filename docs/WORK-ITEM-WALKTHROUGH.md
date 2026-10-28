@@ -387,3 +387,23 @@ Each item below lists: milestone, dependencies, whether it needs approval, branc
 
 Choices still to be confirmed by the user before or during implementation: the Python version floor and package layout (ADLC-001); `gh` token scope and admin enforcement (ADLC-002); where installed skills are found and which methods are required (ADLC-003); output format for `status` (ADLC-007); the Python profile defaults (ADLC-008); the definition of "same failure" (ADLC-016); the `FAILED` to `BACKLOG` retry rule (ADLC-005); how Claude Code's usage-window reset is detected (ADLC-012, 022); and whether to overwrite or keep the old docx (ADLC-030).
 
+
+## Update 2026-10-28: decision 21, the hybrid substrate
+
+The question "can this be built with Claude Code alone?" was answered with a hybrid (PRD section 15, decision 21). A thin Python driver keeps what must not depend on a model's compliance: the board writer, state machine, limits and stop conditions, usage-window pause, one fresh `claude -p` call per iteration, the DoD runner, git and the PR. Claude Code assets carry the rest: roles as subagents (a model per role), methods as skills, guardrails as hooks and `permissions.deny` rules. The driver re-checks the diff after every iteration, so a hook that fails to fire cannot widen scope.
+
+| Item | What changes |
+|---|---|
+| ADLC-009 | Methods are pinned skills; the driver only selects and logs them. |
+| ADLC-010 | `adlc refine` launches an interactive session running the grilling skill; the driver validates the brief. |
+| ADLC-012 | Shrinks to a thin `claude -p` invoker plus the fake client. |
+| ADLC-015 | Tester is a subagent; the driver runs the red check; a hook protects the test files. |
+| ADLC-017 | Invokes the `diagnosing-bugs` skill; no diagnosis logic in Python. |
+| ADLC-019 | Reviewer is a subagent on a different model; the driver parses the verdict and enforces the rounds. |
+| ADLC-021 | PR text from the `pr` skill; the driver does push, `gh`, checks and merge. |
+| ADLC-027 | Guardrails by hooks and deny rules, plus the driver's diff re-check. |
+| **ADLC-032** (new, M2a) | Substrate prototype: prove a Stop hook and a PreToolUse hook on one throwaway task before building on them. Do this before ADLC-009. |
+| **ADLC-033** (new, M2a) | The assets package a target repo receives (subagents, hooks, deny rules), written by `init` and `new`. Needs approval: it lands in protected paths. |
+
+Unchanged and already merged: ADLC-001, 002 and 004. Unchanged and not started: ADLC-003, 005, 006, 007, 008, 011, 013, 014, 016, 018, 020, 022 to 026, 028 to 031.
+

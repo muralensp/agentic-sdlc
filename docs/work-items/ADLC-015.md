@@ -17,3 +17,5 @@ requires_approval: false
 - The orchestrator confirms the new tests fail before the Coder starts; tests that pass already are rejected
 - A Coder edit or deletion of a Tester test is blocked and triggers escalation
 - Uses the `tdd` method: one behaviour at a time
+
+**Re-scope (decision 21):** The Tester is a subagent definition (ADLC-033). The driver still runs the red check and protects the test files; a hook blocks the Coder from editing them.
