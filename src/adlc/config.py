@@ -73,6 +73,13 @@ class Merge:
 
 
 @dataclass(frozen=True)
+class Tests:
+    paths: tuple[str, ...]  # globs of test files; empty until a repo or profile says (ADLC-015)
+    red: str | None  # command for one test file, with {file}; None runs the `test` command
+    failure_markers: tuple[str, ...]  # text a real test failure prints (not a build error)
+
+
+@dataclass(frozen=True)
 class Settings:
     board: Board
     git: Git
@@ -82,6 +89,7 @@ class Settings:
     protected: tuple[str, ...]
     merge: Merge
     methods: Registry
+    tests: Tests
     source: Path | None  # the repo config file, or None when there was none
 
 
@@ -115,6 +123,7 @@ SCHEMA: dict = {
         "method": ("choice", "squash", "rebase", "merge"),
     },
     "methods": ("any",),
+    "tests": {"paths": ("strs",), "red": ("str?",), "failure_markers": ("strs",)},
 }
 
 
@@ -315,5 +324,10 @@ def load_config(repo: str | Path) -> Settings:
             merged["merge"]["method"],
         ),
         methods=registry,
+        tests=Tests(
+            tuple(merged["tests"]["paths"]),
+            merged["tests"]["red"],
+            tuple(merged["tests"]["failure_markers"]),
+        ),
         source=source,
     )
