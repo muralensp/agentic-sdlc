@@ -12,5 +12,10 @@ dod:
   dependency_scan: pip-audit
   secret_scan: gitleaks detect
 
+tests:
+  paths: ["tests/**", "**/test_*.py", "**/*_test.py", "**/conftest.py"]
+  red: pytest {file}
+  failure_markers: ["FAILED", "AssertionError"]
+
 merge:
   required_checks: ["CI passed"]

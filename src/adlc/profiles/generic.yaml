@@ -26,6 +26,11 @@ models:                      # unset: the runner's default; reviewer must differ
   reviewer: null
   pr_writer: null
 
+tests:                       # which files are tests, and how to prove a new one fails (ADLC-015)
+  paths: []                  # globs; the red phase refuses to run until a profile or repo sets them
+  red: null                  # one test file, e.g. `pytest {file}`; null runs the `test` command
+  failure_markers: []        # text a real failure prints, to tell it from a build or import error
+
 dod: {}                      # name: command, filled in by a stack profile
 
 protected:                   # globs that always escalate (FR-41); a stack profile adds to these
