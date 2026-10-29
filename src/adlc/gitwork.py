@@ -10,6 +10,7 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 import time
 import unicodedata
 from dataclasses import dataclass
@@ -242,9 +243,11 @@ def _delete_folder(path: Path) -> None:
         os.chmod(target, stat.S_IWRITE)
         func(target)
 
+    # `onerror` is deprecated from 3.12, where `onexc` replaces it; both pass the failing path
+    handler = {"onexc": writable} if sys.version_info >= (3, 12) else {"onerror": writable}
     for attempt in range(_DELETE_TRIES):
         try:
-            shutil.rmtree(path, onexc=writable)
+            shutil.rmtree(path, **handler)
         except OSError:
             if attempt + 1 < _DELETE_TRIES:
                 time.sleep(_DELETE_WAIT)

@@ -528,7 +528,7 @@ def test_a_folder_that_stays_locked_is_reported_and_the_branch_is_kept(world, mo
     made = world.worktree()
     lose_the_registration_but_keep_the_files(monkeypatch, world.repo)
 
-    def locked(path, onexc=None):
+    def locked(path, **handler):
         raise PermissionError("in use")
 
     monkeypatch.setattr(gitwork.shutil, "rmtree", locked)
