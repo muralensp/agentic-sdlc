@@ -13,7 +13,7 @@ import re
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 
@@ -22,6 +22,7 @@ from adlc.commands import CommandError
 from adlc.config import Settings
 from adlc.dod import DEFAULT_TIMEOUT_SECONDS
 from adlc.gitwork import _git, commit
+from adlc.runlog import render_summary
 from adlc.runner import AgentRequest, AgentResult, AgentRunner, Role
 from adlc.scope import out_of_scope
 from adlc.tdd import Lock, changed_paths, check_locked, proposed_test_change
@@ -91,6 +92,10 @@ class IterationRecord:
     input_tokens: int
     output_tokens: int
     kind: str = "fix"  # fix, or diagnosis (one per stuck signature, not counted as an iteration)
+    model: str | None = None  # the model that cost most, from the runner
+    cache_read_tokens: int = 0
+    cache_creation_tokens: int = 0
+    cost_usd: float = 0.0  # list price: an estimate, not a bill, on a subscription
 
 
 @dataclass(frozen=True)
@@ -159,22 +164,52 @@ class _Loop:
         self.diagnosis = ""
         self.diagnosed: set[str] = set()  # stuck signatures that already had their one diagnosis
         self.record = Path(self.run_dir) / RECORD
+        self.started: float | None = None  # on the loop's clock
+        self.started_at = datetime.now(UTC).isoformat(timespec="seconds")
+
+    def put(self, rel: str, text: str) -> None:
+        """Write a text file in the run folder; everything that comes from text is scrubbed."""
+        write_atomic(Path(self.run_dir) / rel, self.scrub(text).encode("utf-8"))
+
+    def usage(self) -> dict:
+        its = self.iterations
+        return {
+            "input_tokens": sum(i.input_tokens for i in its),
+            "output_tokens": sum(i.output_tokens for i in its),
+            "cache_read_tokens": sum(i.cache_read_tokens for i in its),
+            "cache_creation_tokens": sum(i.cache_creation_tokens for i in its),
+            "cost_usd_list": round(sum(i.cost_usd for i in its), 6),
+        }
 
     # state saved for `loop-status` and for a person reading what happened
-    def save(self, stop: Stop | None = None, detail: str = "") -> None:
+    def save(
+        self, stop: Stop | None = None, detail: str = "", resets_at: datetime | None = None
+    ) -> None:
+        """Rewrite loop.json and summary.md; time and tokens are measured, never read from text."""
+        elapsed = 0.0 if self.started is None else self.clock() - self.started
+        signatures = [i.signature for i in self.iterations if i.signature]
         document = {
             "schema": SCHEMA,
+            "key": self.key,
+            "started_at": self.started_at,
+            "updated_at": datetime.now(UTC).isoformat(timespec="seconds"),
+            "elapsed_seconds": round(elapsed, 3),
             "stop": stop.value if stop else None,
             "detail": detail,
+            "resets_at": resets_at.isoformat() if resets_at else None,
             "review_rounds": self.review_rounds,
             "findings": self.findings,
             "diagnosis": self.diagnosis,
+            "last_signature": signatures[-1] if signatures else "",
+            "usage": self.usage(),
+            "methods": dict(self.methods or {}),
             "iterations": [asdict(i) for i in self.iterations],
         }
         write_atomic(self.record, (json.dumps(document, indent=2) + "\n").encode("utf-8"))
+        self.put("summary.md", render_summary(document))
 
     def finish(self, stop: Stop, detail: str = "", resets_at: datetime | None = None):
-        self.save(stop, detail)
+        self.save(stop, detail, resets_at)
         return LoopOutcome(
             stop,
             detail,
@@ -229,18 +264,34 @@ class _Loop:
         return "\n\n".join(sections)
 
     def call_agent(
-        self, number: int, deadline: float, instructions: str = INSTRUCTIONS, method=None
+        self,
+        number: int,
+        deadline: float,
+        checkpoint: str,
+        instructions: str = INSTRUCTIONS,
+        method=None,
     ) -> AgentResult:
+        """Call the Coder and log the prompt, the reply and what it changed (before any revert)."""
         remaining = deadline - self.clock()
+        prompt = self.prompt(instructions)
         request = AgentRequest(
             Role.CODER,
-            self.prompt(instructions),
+            prompt,
             Path(self.worktree),
             method=method or self.method,
             timeout=max(1.0, min(DEFAULT_TIMEOUT_SECONDS, remaining)),
             log_path=Path(self.run_dir) / f"agent-{number}.jsonl",
         )
-        return self.runner.run(request)
+        self.put(f"prompts/iteration-{number}.md", prompt)
+        result = self.runner.run(request)
+        self.put(
+            f"responses/iteration-{number}.md",
+            f"status: {result.status}\n\n{result.text or result.detail}\n",
+        )
+        _git(self.worktree, "add", "-A")  # so new files show in the diff; a revert clears it
+        diff = _git(self.worktree, "diff", "--cached", checkpoint).stdout
+        self.put(f"diffs/iteration-{number}.diff", diff)
+        return result
 
     def review(self) -> Review:
         verdict = self.reviewer(Path(self.worktree), self.base)
@@ -277,6 +328,10 @@ class _Loop:
                 result.usage.input_tokens,
                 result.usage.output_tokens,
                 kind,
+                result.primary_model,
+                result.usage.cache_read_tokens,
+                result.usage.cache_creation_tokens,
+                result.usage.cost_usd_list,
             )
         )
         self.save()
@@ -297,7 +352,7 @@ class _Loop:
             commit(worktree, f"chore(loop): iteration {number - 1} notes", self.settings.git)
         checkpoint = _git(worktree, "rev-parse", "HEAD").stdout.strip()
         instructions = DIAGNOSIS_INSTRUCTIONS.format(detail=detail)
-        result = self.call_agent(number, deadline, instructions, self.diagnose_method)
+        result = self.call_agent(number, deadline, checkpoint, instructions, self.diagnose_method)
         _revert(worktree, checkpoint)
         if result.status == "rate_limited":
             self.diagnosed.discard(key)  # it did not happen; it may be tried after the pause
@@ -320,7 +375,7 @@ class _Loop:
                 f"{worktree} has uncommitted changes; commit the Tester's tests (and anything "
                 "else) before the loop starts"
             )
-        started = self.clock()
+        self.started = started = self.clock()
         deadline = started + self.max_minutes * 60
         state, outputs = self.verify(0)
         before = set(outputs)
@@ -350,7 +405,7 @@ class _Loop:
 
             number = len(self.iterations) + 1
             checkpoint = _git(worktree, "rev-parse", "HEAD").stdout.strip()
-            result = self.call_agent(number, deadline)
+            result = self.call_agent(number, deadline, checkpoint)
             if result.status == "rate_limited":
                 _revert(worktree, checkpoint)
                 if self.on_pause:
@@ -435,6 +490,9 @@ def run_loop(
     baseline: Baseline | None = None,
     method: str | None = None,
     diagnose_method: str | None = None,
+    key: str = "",
+    methods: Mapping[str, Mapping] | None = None,
+    scrub: Callable[[str], str] = lambda text: text,
     max_iterations: int | None = None,
     bash: str | None = None,
     dod_timeout: float = DEFAULT_TIMEOUT_SECONDS,
@@ -450,8 +508,10 @@ def run_loop(
     `prompt` is the part every iteration shares (the brief, AGENTS.md, the repo map); `base` is the
     commit the branch started from. The worktree must be clean, with the Tester's tests committed
     and `lock` taken on them. `on_pause` is called when a usage limit pauses the loop (ADLC-022).
-    `diagnose_method` is the resolved `diagnose` stage text: when given, a stuck loop gets one
-    diagnosis iteration per stuck signature before it stops, and the report is on the outcome.
+    `key`, `methods` (the stage resolutions' records) and `scrub` (applied to all logged text) feed
+    the run log in `run_dir`. `diagnose_method` is the resolved `diagnose` stage text: when given,
+    a stuck loop gets one diagnosis iteration per stuck signature before it stops, and the report
+    is on the outcome.
     """
     limits = settings.limits
     return _Loop(
@@ -466,6 +526,9 @@ def run_loop(
         baseline=baseline,
         method=method,
         diagnose_method=diagnose_method,
+        key=key,
+        methods=methods,
+        scrub=scrub,
         max_iterations=max_iterations or limits.max_iterations,
         max_review_rounds=limits.max_review_rounds,
         max_minutes=limits.max_task_minutes,
