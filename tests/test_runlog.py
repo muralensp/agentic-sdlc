@@ -13,6 +13,13 @@ from adlc.runner import Usage
 from test_loop import CHECK_STEPS, FIX_A, FIX_B, edit, g, make_scenario, write
 
 
+@pytest.fixture(autouse=True)
+def identity(monkeypatch):
+    for who in ("AUTHOR", "COMMITTER"):
+        monkeypatch.setenv(f"GIT_{who}_NAME", "Test User")
+        monkeypatch.setenv(f"GIT_{who}_EMAIL", "test@example.com")
+
+
 @pytest.fixture
 def sc(tmp_path):
     return make_scenario(tmp_path)
