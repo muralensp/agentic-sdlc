@@ -45,6 +45,14 @@ Do not edit the tests the Tester wrote; if one is wrong, describe it under a hea
 Before you finish, update progress.md (what you tried, what failed, what remains).
 Print {PROMISE} only if you believe everything is done: it only starts the checks, which decide."""
 
+DIAGNOSIS_INSTRUCTIONS = """\
+## Your job this iteration: diagnose, do not fix
+The loop is stuck: {detail}.
+Do not fix it. Follow the method: reproduce the failure, minimise it, form hypotheses and test
+them with instrumentation. Anything you change is discarded after this call.
+Your final message is the diagnosis report: what you reproduced, the most likely cause with the
+evidence for it, and what the next attempt should do differently. Keep it short."""
+
 
 class Stop(StrEnum):
     SUCCESS = "success"
@@ -82,6 +90,7 @@ class IterationRecord:
     duration: float  # seconds, measured by the runner
     input_tokens: int
     output_tokens: int
+    kind: str = "fix"  # fix, or diagnosis (one per stuck signature, not counted as an iteration)
 
 
 @dataclass(frozen=True)
@@ -93,6 +102,7 @@ class LoopOutcome:
     findings: str  # the Reviewer's latest findings
     resets_at: datetime | None  # when a paused loop may resume
     record: Path
+    diagnosis: str = ""  # the report of the diagnosis iteration, if one ran
 
     @property
     def success(self) -> bool:
@@ -146,6 +156,8 @@ class _Loop:
         self.iterations: list[IterationRecord] = []
         self.findings = ""
         self.review_rounds = 0
+        self.diagnosis = ""
+        self.diagnosed: set[str] = set()  # stuck signatures that already had their one diagnosis
         self.record = Path(self.run_dir) / RECORD
 
     # state saved for `loop-status` and for a person reading what happened
@@ -156,6 +168,7 @@ class _Loop:
             "detail": detail,
             "review_rounds": self.review_rounds,
             "findings": self.findings,
+            "diagnosis": self.diagnosis,
             "iterations": [asdict(i) for i in self.iterations],
         }
         write_atomic(self.record, (json.dumps(document, indent=2) + "\n").encode("utf-8"))
@@ -170,6 +183,7 @@ class _Loop:
             self.findings,
             resets_at,
             self.record,
+            self.diagnosis,
         )
 
     def verify(self, number: int) -> tuple[Verification, dict[str, str]]:
@@ -194,31 +208,35 @@ class _Loop:
         self.report = failure_report(done, out_dir, self.max_report_chars)
         return done, outputs
 
-    def prompt(self) -> str:
+    def prompt(self, instructions: str = INSTRUCTIONS) -> str:
         locked = [f":(exclude,literal){p}" for p in (*self.lock.paths, self.progress_file)]
         diff = _git(self.worktree, "diff", self.base, "--", ".", *locked).stdout
         notes = Path(self.worktree) / self.progress_file
         progress = notes.read_text(encoding="utf-8", errors="replace") if notes.is_file() else ""
         sections = [
             self.brief,
-            INSTRUCTIONS,
+            instructions,
             "## Branch diff (everything done so far, without the locked tests)\n"
             + (_trim(diff, self.max_diff_chars) or "(no changes yet)"),
             f"## {self.progress_file}\n"
             + (_trim(progress.strip(), self.max_progress_chars, keep_end=True) or "(none yet)"),
             f"## Last verification\n{self.report}",
         ]
+        if self.diagnosis:
+            sections.append(f"## Diagnosis report (from the diagnosis iteration)\n{self.diagnosis}")
         if self.findings:
             sections.append(f"## Reviewer findings to address\n{self.findings}")
         return "\n\n".join(sections)
 
-    def call_agent(self, number: int, deadline: float) -> AgentResult:
+    def call_agent(
+        self, number: int, deadline: float, instructions: str = INSTRUCTIONS, method=None
+    ) -> AgentResult:
         remaining = deadline - self.clock()
         request = AgentRequest(
             Role.CODER,
-            self.prompt(),
+            self.prompt(instructions),
             Path(self.worktree),
-            method=self.method,
+            method=method or self.method,
             timeout=max(1.0, min(DEFAULT_TIMEOUT_SECONDS, remaining)),
             log_path=Path(self.run_dir) / f"agent-{number}.jsonl",
         )
@@ -233,7 +251,16 @@ class _Loop:
         return verdict
 
     def log(
-        self, number, result, *, reverted=False, failing=(), signature="", ready=False, changed=()
+        self,
+        number,
+        result,
+        *,
+        reverted=False,
+        failing=(),
+        signature="",
+        ready=False,
+        changed=(),
+        kind="fix",
     ) -> None:
         promise = result.status == "ok" and PROMISE in result.text
         self.iterations.append(
@@ -249,9 +276,42 @@ class _Loop:
                 result.duration,
                 result.usage.input_tokens,
                 result.usage.output_tokens,
+                kind,
             )
         )
         self.save()
+
+    def diagnose_stuck(self, key: str, detail: str, deadline: float) -> LoopOutcome | None:
+        """Spend one diagnosis iteration on a stuck signature; None means carry on.
+
+        Returns the outcome to stop with when there is no diagnosis method, the signature has had
+        its one diagnosis already, the diagnosis gave no report, or a usage limit paused it. What
+        the diagnosis changes is discarded: only its report is kept.
+        """
+        if not self.diagnose_method or key in self.diagnosed:
+            return self.finish(Stop.STUCK, detail)
+        self.diagnosed.add(key)
+        worktree = Path(self.worktree)
+        number = len(self.iterations) + 1
+        if _git(worktree, "status", "--porcelain").stdout.strip():
+            commit(worktree, f"chore(loop): iteration {number - 1} notes", self.settings.git)
+        checkpoint = _git(worktree, "rev-parse", "HEAD").stdout.strip()
+        instructions = DIAGNOSIS_INSTRUCTIONS.format(detail=detail)
+        result = self.call_agent(number, deadline, instructions, self.diagnose_method)
+        _revert(worktree, checkpoint)
+        if result.status == "rate_limited":
+            self.diagnosed.discard(key)  # it did not happen; it may be tried after the pause
+            if self.on_pause:
+                self.on_pause(result)
+            resets = result.rate_limit.resets_at if result.rate_limit else None
+            return self.finish(Stop.PAUSED, result.detail, resets)
+        self.log(number, result, reverted=True, kind="diagnosis")
+        report = result.text.strip() if result.status == "ok" else ""
+        if not report:
+            return self.finish(Stop.STUCK, f"{detail}; the diagnosis iteration gave no report")
+        self.diagnosis = f"{self.diagnosis}\n\n{report}".strip()
+        self.save()
+        return None
 
     def run(self) -> LoopOutcome:
         worktree = Path(self.worktree)
@@ -265,8 +325,9 @@ class _Loop:
         state, outputs = self.verify(0)
         before = set(outputs)
         previous = ""  # the starting failure is not an iteration's failure
+        resume = False  # just diagnosed: do not ask the Reviewer again about unchanged code
         while True:
-            if state.ready:
+            if state.ready and not resume:
                 verdict = self.review()
                 if verdict.decision == "approve":
                     return self.finish(Stop.SUCCESS)
@@ -280,7 +341,9 @@ class _Loop:
                         f"the Reviewer still asked for changes after {self.max_review_rounds} "
                         "round(s)",
                     )
-            if len(self.iterations) >= self.max_iterations:
+            resume = False
+            fixes = sum(i.kind == "fix" for i in self.iterations)
+            if fixes >= self.max_iterations:
                 return self.finish(Stop.MAX_ITERATIONS, f"{self.max_iterations} iterations used")
             if self.clock() >= deadline:
                 return self.finish(Stop.MAX_MINUTES, f"{self.max_minutes} minutes used")
@@ -324,7 +387,11 @@ class _Loop:
                 )
             if not code:
                 self.log(number, result)
-                return self.finish(Stop.STUCK, "the iteration made no change")
+                stop = self.diagnose_stuck("no change", "the iteration made no change", deadline)
+                if stop:
+                    return stop
+                resume = True
+                continue
 
             state, outputs = self.verify(number)
             failing = set(outputs)
@@ -345,9 +412,14 @@ class _Loop:
                 changed=code,
             )
             commit(worktree, f"chore(loop): iteration {number}", self.settings.git)
-            if signature and signature == previous:
-                return self.finish(Stop.STUCK, f"the same failure twice: {signature}")
+            again = bool(signature) and signature == previous
             before, previous = failing, signature
+            if again:
+                detail = f"the same failure twice: {signature}"
+                stop = self.diagnose_stuck(signature, detail, deadline)
+                if stop:
+                    return stop
+                resume = True
 
 
 def run_loop(
@@ -362,6 +434,7 @@ def run_loop(
     run_dir: Path,
     baseline: Baseline | None = None,
     method: str | None = None,
+    diagnose_method: str | None = None,
     max_iterations: int | None = None,
     bash: str | None = None,
     dod_timeout: float = DEFAULT_TIMEOUT_SECONDS,
@@ -377,6 +450,8 @@ def run_loop(
     `prompt` is the part every iteration shares (the brief, AGENTS.md, the repo map); `base` is the
     commit the branch started from. The worktree must be clean, with the Tester's tests committed
     and `lock` taken on them. `on_pause` is called when a usage limit pauses the loop (ADLC-022).
+    `diagnose_method` is the resolved `diagnose` stage text: when given, a stuck loop gets one
+    diagnosis iteration per stuck signature before it stops, and the report is on the outcome.
     """
     limits = settings.limits
     return _Loop(
@@ -390,6 +465,7 @@ def run_loop(
         run_dir=run_dir,
         baseline=baseline,
         method=method,
+        diagnose_method=diagnose_method,
         max_iterations=max_iterations or limits.max_iterations,
         max_review_rounds=limits.max_review_rounds,
         max_minutes=limits.max_task_minutes,

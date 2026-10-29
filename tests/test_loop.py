@@ -405,3 +405,125 @@ def test_without_a_marker_the_first_non_blank_line_is_used():
 
 def test_no_failures_means_no_signature():
     assert failure_signature({}, ["FAIL"]) == ""
+
+
+# --- the diagnosis iteration (ADLC-017) ---------------------------------------------------------
+
+DIAG = "DIAGNOSIS: the cause is a stale cache in src/n.txt"
+
+
+def diagnose(text=DIAG):
+    """A diagnosis iteration: it is asked to look, but it also (wrongly) edits code."""
+
+    def step(request):
+        write(request.cwd, "src/probe.txt", "instrumentation")
+        return ok(text)
+
+    return step
+
+
+STUCK_TWICE = [edit(("src/n.txt", "a")), edit(("src/n.txt", "a"), ("src/x", "1"))]
+
+
+def test_a_stuck_loop_gets_one_diagnosis_and_the_report_reaches_the_outcome(tmp_path):
+    sc = make_scenario(tmp_path, check=CHECK_STEPS)
+    script = [*STUCK_TWICE, diagnose(), edit(("src/n.txt", "a"), ("src/y", "1"))]
+    outcome, runner = sc.run(script, diagnose_method="use diagnosing-bugs")
+    assert outcome.stop is Stop.STUCK and outcome.escalate
+    assert "stale cache" in outcome.diagnosis
+    assert len(runner.requests) == 4  # two fixes, one diagnosis, one more fix: never a second one
+    assert [i.kind for i in outcome.iterations] == ["fix", "fix", "diagnosis", "fix"]
+    assert json.loads(outcome.record.read_text())["diagnosis"] == outcome.diagnosis
+
+
+def test_the_diagnosis_call_uses_the_diagnosis_method_and_asks_for_no_fix(tmp_path):
+    sc = make_scenario(tmp_path, check=CHECK_STEPS)
+    _, runner = sc.run(
+        [*STUCK_TWICE, diagnose(), edit(("src/n.txt", "a"), ("src/y", "1"))],
+        diagnose_method="use diagnosing-bugs",
+    )
+    fix, diagnosis = runner.requests[1], runner.requests[2]
+    assert fix.method is None and diagnosis.method == "use diagnosing-bugs"
+    assert diagnosis.role is Role.CODER and diagnosis.cwd == sc.worktree
+    assert "stuck" in diagnosis.prompt and "Do not fix" in diagnosis.prompt
+    assert diagnosis.prompt.startswith("BRIEF: make the tests pass")
+
+
+def test_the_diagnosis_report_is_carried_into_the_next_iteration(tmp_path):
+    sc = make_scenario(tmp_path, check=CHECK_STEPS)
+    _, runner = sc.run(
+        [*STUCK_TWICE, diagnose(), edit(("src/n.txt", "a"), ("src/y", "1"))], diagnose_method="m"
+    )
+    assert "stale cache" not in runner.requests[1].prompt
+    assert "stale cache" in runner.requests[3].prompt
+
+
+def test_a_diagnosis_that_unblocks_the_loop_lets_it_finish(sc):
+    script = [edit(FIX_A), edit(FIX_A, ("src/x", "1")), diagnose(), edit(FIX_B)]
+    outcome, runner = sc.run(script, diagnose_method="m")
+    assert outcome.stop is Stop.SUCCESS and "stale cache" in outcome.diagnosis
+    assert len(runner.requests) == 4
+
+
+def test_what_the_diagnosis_edits_is_thrown_away(tmp_path):
+    sc = make_scenario(tmp_path, check=CHECK_STEPS)
+    sc.run(
+        [*STUCK_TWICE, diagnose(), edit(("src/n.txt", "a"), ("src/y", "1"))], diagnose_method="m"
+    )
+    assert not (sc.worktree / "src" / "probe.txt").exists()
+    assert g(sc.worktree, "status", "--porcelain") == ""
+
+
+def test_the_diagnosis_does_not_use_up_an_iteration(tmp_path):
+    sc = make_scenario(tmp_path, check=CHECK_STEPS, limits={"max_iterations": 3})
+    script = [*STUCK_TWICE, diagnose(), edit(("src/n.txt", "b"))]
+    outcome, runner = sc.run(script, diagnose_method="m")
+    assert outcome.stop is Stop.MAX_ITERATIONS and len(runner.requests) == 4
+    assert sum(i.kind == "fix" for i in outcome.iterations) == 3
+
+
+def test_a_no_change_stuck_loop_is_diagnosed_once_and_keeps_its_notes(sc):
+    script = [edit(FIX_A), edit(progress="my notes"), diagnose(), edit(progress="more")]
+    outcome, runner = sc.run(script, diagnose_method="m")
+    assert outcome.stop is Stop.STUCK and "no change" in outcome.detail
+    assert len(runner.requests) == 4 and "stale cache" in outcome.diagnosis
+    assert "my notes" in runner.requests[2].prompt  # progress.md survived the diagnosis
+
+
+def test_without_a_diagnosis_method_a_stuck_loop_escalates_at_once(tmp_path):
+    sc = make_scenario(tmp_path, check=CHECK_STEPS)
+    outcome, runner = sc.run(STUCK_TWICE)
+    assert outcome.stop is Stop.STUCK and outcome.diagnosis == ""
+    assert len(runner.requests) == 2
+
+
+def test_a_failed_diagnosis_still_counts_as_the_one_and_the_loop_escalates(tmp_path):
+    sc = make_scenario(tmp_path, check=CHECK_STEPS)
+    outcome, runner = sc.run([*STUCK_TWICE, error("fell over")], diagnose_method="m")
+    assert outcome.stop is Stop.STUCK and "diagnosis" in outcome.detail
+    assert outcome.diagnosis == "" and len(runner.requests) == 3
+
+
+def test_a_usage_limit_during_diagnosis_pauses_the_loop(tmp_path):
+    sc = make_scenario(tmp_path, check=CHECK_STEPS)
+    outcome, _ = sc.run([*STUCK_TWICE, rate_limited(resets_at=1_900_000_000)], diagnose_method="m")
+    assert outcome.stop is Stop.PAUSED and not outcome.escalate
+    assert g(sc.worktree, "status", "--porcelain") == ""
+
+
+def test_the_reviewer_is_not_asked_again_about_code_that_did_not_change(sc):
+    asked = []
+
+    def review(worktree, base):
+        asked.append(1)
+        return Review("changes_requested", "tidy up") if len(asked) == 1 else Review("approve")
+
+    script = [
+        edit(FIX_A, FIX_B),  # green: the Reviewer asks for changes
+        edit(progress="no idea what to change"),  # no change: stuck, so diagnose
+        diagnose(),
+        edit(("src/c.txt", "c")),
+    ]
+    outcome, runner = sc.run(script, review=review, diagnose_method="m")
+    assert outcome.stop is Stop.SUCCESS and len(runner.requests) == 4
+    assert len(asked) == 2  # once before the stuck iteration, once after the real change
