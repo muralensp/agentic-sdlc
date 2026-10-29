@@ -1,8 +1,9 @@
 """Run Definition of Done commands and record what really happened (FR-10a).
 
 Each command runs as `bash -c` in the repo, with its output redirected to files and no pipe, so the
-exit code is the process's own. A failed command is run once more to expose a flaky start; a command
-that hangs is killed with everything it started and is not retried.
+exit code is the process's own. A command that fails quickly is run once more to expose a flaky
+start; one that failed after a long run, or that hangs, is not retried (a hang is killed with
+everything it started).
 """
 
 import os
@@ -17,6 +18,7 @@ from pathlib import Path
 from adlc.commands import CommandError
 
 DEFAULT_TIMEOUT_SECONDS = 20 * 60
+RETRY_UNDER_SECONDS = 5 * 60  # a flaky start fails fast; a long failure is not worth running twice
 _BASH_NEXT_TO_GIT = ("bin/bash.exe", "usr/bin/bash.exe")
 
 
@@ -102,14 +104,20 @@ def _safe(name: str) -> str:
 
 
 def run_command(
-    name: str, command: str, cwd: Path, out_dir: Path, timeout: float, bash: str
+    name: str,
+    command: str,
+    cwd: Path,
+    out_dir: Path,
+    timeout: float,
+    bash: str,
+    retry_under: float = RETRY_UNDER_SECONDS,
 ) -> CommandResult:
     out_dir.mkdir(parents=True, exist_ok=True)
     stem = _safe(name)
     out, err = out_dir / f"{stem}.out", out_dir / f"{stem}.err"
     code, seconds = _once(bash, command, cwd, out, err, timeout)
     attempts, flaky = 1, False
-    if code not in (0, None):  # a failure, not a hang: look once more for a flaky start
+    if code not in (0, None) and seconds < retry_under:  # a quick failure: look for a flaky start
         os.replace(out, out_dir / f"{stem}.attempt1.out")
         os.replace(err, out_dir / f"{stem}.attempt1.err")
         code, again = _once(bash, command, cwd, out, err, timeout)
@@ -125,6 +133,7 @@ def run_all(
     *,
     bash: str,
     timeout: float = DEFAULT_TIMEOUT_SECONDS,
+    retry_under: float = RETRY_UNDER_SECONDS,
     only: Sequence[str] = (),
     skip: Sequence[str] = (),
     progress: Callable[[str], None] | None = None,
@@ -145,5 +154,5 @@ def run_all(
             continue
         if progress:
             progress(name)
-        results.append(run_command(name, command, cwd, out_dir, timeout, bash))
+        results.append(run_command(name, command, cwd, out_dir, timeout, bash, retry_under))
     return results

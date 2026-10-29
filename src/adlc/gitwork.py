@@ -7,6 +7,8 @@ base branch.
 
 import os
 import re
+import shutil
+import stat
 import subprocess
 import time
 import unicodedata
@@ -20,6 +22,8 @@ from adlc.tasks import KEY_PATTERN
 KEYED_TYPES = ("feature", "bugfix", "hotfix")  # the others carry only a slug
 MAX_SLUG = 40
 MAX_SUBJECT_LINE = 72
+_DELETE_TRIES = 10  # Windows keeps files open for a while after a build or test run
+_DELETE_WAIT = 1.0  # seconds
 _SLUG = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 _COMMIT_TYPES = "feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert"
 _SUBJECT = re.compile(rf"^({_COMMIT_TYPES})(\([a-z0-9][a-z0-9._/-]*\))?!?: \S.*$")
@@ -231,6 +235,27 @@ def commit(worktree: Path, message: str, git: Git) -> str:
     return _git(worktree, "rev-parse", "HEAD").stdout.strip()
 
 
+def _delete_folder(path: Path) -> None:
+    """Delete what git left of a removed worktree, waiting out files that are still in use."""
+
+    def writable(func, target, _excinfo):
+        os.chmod(target, stat.S_IWRITE)
+        func(target)
+
+    for attempt in range(_DELETE_TRIES):
+        try:
+            shutil.rmtree(path, onexc=writable)
+        except OSError:
+            if attempt + 1 < _DELETE_TRIES:
+                time.sleep(_DELETE_WAIT)
+        if not path.exists():
+            return
+    raise CommandError(
+        f"git has removed the worktree but {path} could not be fully deleted; something still "
+        "has files open in it (a build server or an editor?). Close it and delete the folder"
+    )
+
+
 def remove_worktree(
     repo: Path,
     key: str,
@@ -258,7 +283,10 @@ def remove_worktree(
         args = ("worktree", "remove", *(("--force",) if force else ()), str(path))
         if _git(repo, *args, check=False).returncode:
             time.sleep(0.5)  # Windows may still hold the folder for a moment
-            _git(repo, *args)
+            if _git(repo, *args, check=False).returncode:
+                if any(_same(path, w.path) for w in list_worktrees(repo)):
+                    _git(repo, *args)  # still a worktree: report git's own reason
+                _delete_folder(path)  # git forgot it but left files behind
     _git(repo, "worktree", "prune")
     deleted = False
     if delete_branch and entry.branch:
