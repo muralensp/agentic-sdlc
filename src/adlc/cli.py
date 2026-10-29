@@ -24,6 +24,8 @@ from adlc.commands import (
 )
 from adlc.config import ConfigError, load_config
 from adlc.methods import MethodsError, check, load_registry, pins_yaml
+from adlc.plan import plan_run, render_plan
+from adlc.runlog import loop_status
 from adlc.tasks import TYPES
 
 
@@ -74,7 +76,20 @@ def build_parser() -> argparse.ArgumentParser:
     refine.add_argument("target", help="a work item key, or the text of a new idea")
     refine.add_argument("--code", help="context code for a new idea (default: board.code)")
     refine.add_argument("--new-code", action="store_true", help="allow a code with no items yet")
-    for command in (add, status, log, refine):
+    status_loop = commands.add_parser(
+        "loop-status", help="show a run's iterations, usage, last failure and stop reason"
+    )
+    status_loop.add_argument("key")
+    status_loop.add_argument("--run", type=int, help="a specific run number (default: the newest)")
+    run = commands.add_parser("run", help="plan or run a task")
+    run.add_argument("key")
+    run.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="show the task, branch and prompts without calling a model or touching git",
+    )
+    run.add_argument("--skills-root", type=Path, help="where plugin skills are installed")
+    for command in (add, status, log, refine, status_loop, run):
         command.add_argument("--repo", type=Path, help="default: the repository around this folder")
     return parser
 
@@ -176,7 +191,28 @@ def _refine(args: argparse.Namespace, repo: Path) -> int:
     return 0
 
 
-_BOARD_COMMANDS = {"add": _add, "status": _status, "log": _log, "refine": _refine}
+def _loop_status(args: argparse.Namespace, repo: Path) -> int:
+    print(loop_status(repo, args.key, args.run), end="")
+    return 0
+
+
+def _run(args: argparse.Namespace, repo: Path) -> int:
+    if not args.dry_run:
+        raise CommandError(
+            "running a task is not built yet; use --dry-run to see its branch and prompts"
+        )
+    print(render_plan(plan_run(repo, args.key, skills_root=args.skills_root)), end="")
+    return 0
+
+
+_BOARD_COMMANDS = {
+    "add": _add,
+    "status": _status,
+    "log": _log,
+    "refine": _refine,
+    "loop-status": _loop_status,
+    "run": _run,
+}
 
 
 def run_board_command(args: argparse.Namespace) -> int:

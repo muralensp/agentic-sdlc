@@ -206,7 +206,7 @@ def status_report(repo: Path) -> dict:
     }
 
 
-def _latest_run(repo: Path, key: str) -> tuple[int, Path] | None:
+def latest_run(repo: Path, key: str) -> tuple[int, Path] | None:
     folder = repo / ".adlc" / "logs" / key
     runs = []
     if folder.is_dir():
@@ -248,7 +248,7 @@ def render_status(report: dict, *, repo: Path, all_items: bool) -> str:
             if item["reason"] and group != "done":
                 out.append(f"             {_short(item['reason'])}")
             if group in ("attention", "in_flight"):
-                run = _latest_run(repo, item["key"])
+                run = latest_run(repo, item["key"])
                 where = (run[1] / "summary.md").relative_to(repo).as_posix() if run else None
                 out.append(f"             log: {where or 'no log yet'}")
         out.append("")
@@ -267,7 +267,7 @@ def read_log(repo: Path, key: str, run: int | None = None) -> str:
     if key not in {r.key for r in Board(board_path).rows()}:
         raise CommandError(f"no work item {key!r} on the board")
     if run is None:
-        latest = _latest_run(repo, key)
+        latest = latest_run(repo, key)
         if latest is None:
             return f"no runs yet for {key}"
         run, folder = latest
