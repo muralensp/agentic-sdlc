@@ -29,9 +29,18 @@ The hook logic is also covered by 19 unit tests (`tests/test_substrate_hooks.py`
 4. **File-tool guardrails work; shell writes bypass them.** Run D is the reason decision 21 keeps the driver's post-iteration diff check, and ADLC-027 must not rely on hooks alone. Options for ADLC-033/027, not tried here: a `Bash` matcher that rejects obvious writes to protected paths (brittle), `permissions.deny` rules (not tested), or running the Coder with Bash restricted to an allow-list. None replaces the diff check.
 5. **`--setting-sources project`** isolates a run from user-level settings and hooks. The driver should always pass it.
 
+## Headless invocation and the usage-window signal (ADLC-012, Claude Code 2.1.311)
+
+Confirmed by a real `claude -p ... --output-format json` call and by a live test of `adlc.runner` (`ADLC_LIVE=1`):
+
+- The prompt can be sent on stdin; `--append-system-prompt-file`, `--agent`, `--setting-sources`, `--no-session-persistence`, `--max-budget-usd`, `--allowedTools` and `--disallowedTools` are accepted. `--output-format stream-json` needs `--verbose` with `-p`.
+- The final `result` event carries `is_error`, `subtype`, `terminal_reason`, `api_error_status`, `num_turns`, `total_cost_usd`, `usage` and per-model `modelUsage`.
+- **Usage limits (from the installed binary, not yet seen live):** stream-json emits `rate_limit_event` messages whose `rate_limit_info` holds `status` (`rejected` when blocked, `allowed_warning` near the limit), `resetsAt`, `rateLimitType` (`five_hour`, `seven_day`) and `isUsingOverage`. Texts "You've hit your limit" and "Usage limit reached" also exist. `adlc.runner` treats a rejected event, an error result with `api_error_status` 429, or error text matching those phrases as `rate_limited`.
+- The classifier is built on that schema and synthetic samples. The first real occurrence is saved to `.adlc/logs/rate-limits.jsonl` (when the runner is given that path); compare it with the classifier then and tighten it.
+
 ## Not answered
 
-- **Usage-window signal:** no run hit a limit, so the exact error or `terminal_reason` for an exhausted window is still unknown. ADLC-012 and ADLC-022 must capture it the first time it happens, and until then treat any non-success `terminal_reason` as "stop and look".
+- **Usage-window signal:** no run has hit a limit, so the real shape is still unseen (see the ADLC-012 section above). Any non-success `terminal_reason` is treated as an error: "stop and look".
 - **`permissions.deny` for paths and Bash patterns** was not exercised.
 - **Windows hook commands** ran through Git Bash with a full path to the venv Python. Quoting rules for paths with spaces were not tested.
 - **Interactive skills** (grilling) were not run headless; ADLC-010 still needs an interactive launcher.
