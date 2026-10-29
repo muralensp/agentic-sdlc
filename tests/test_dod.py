@@ -140,6 +140,30 @@ def test_a_command_that_fails_twice_is_a_failure_and_keeps_both_outputs(tmp_path
     assert read(tmp_path, result.out).strip() == "run"
 
 
+def test_a_slow_failure_is_not_retried(tmp_path):
+    work = tmp_path / "work"
+    work.mkdir()
+    command = "sleep 0.4; echo x >> count.txt; exit 1"
+    result = run_command("step", command, work, tmp_path / "out", 30, BASH, retry_under=0.2)
+    assert (result.status, result.attempts, result.flaky) == ("fail", 1, False)
+    assert (work / "count.txt").read_text().count("x") == 1
+
+
+def test_a_quick_failure_is_still_retried_under_the_limit(tmp_path):
+    work = tmp_path / "work"
+    work.mkdir()
+    result = run_command("step", "exit 3", work, tmp_path / "out", 30, BASH, retry_under=60)
+    assert (result.status, result.attempts) == ("fail", 2)
+
+
+def test_run_all_passes_the_retry_limit_on(tmp_path):
+    work = tmp_path / "work"
+    work.mkdir()
+    dod = {"slow": "sleep 0.4; exit 1"}
+    [slow] = run_all(dod, work, tmp_path / "out", bash=BASH, retry_under=0.2)
+    assert slow.attempts == 1
+
+
 def test_a_passing_command_is_run_only_once(tmp_path):
     result = run(tmp_path, "echo x >> count.txt")
     assert result.attempts == 1

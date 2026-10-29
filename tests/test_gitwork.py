@@ -1,6 +1,7 @@
 """Branch names, commit messages and one worktree per task (ADLC-013)."""
 
 import hashlib
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -489,3 +490,69 @@ def test_a_plain_folder_at_the_worktree_path_is_not_removed(world):
 def test_a_body_must_follow_a_blank_line():
     assert check_commit_message("feat(x): a" + chr(10) + "body right away") is not None
     assert check_commit_message("feat(x): a" + chr(10) * 2 + "body") is None
+
+
+def lose_the_registration_but_keep_the_files(monkeypatch, repo: Path):
+    """Like Windows when a build server holds files: git forgets the worktree, the folder stays."""
+    import subprocess as sp
+
+    from adlc import gitwork
+
+    real = gitwork._git
+    real_rmtree = shutil.rmtree
+
+    def flaky(cwd, *args, **kwargs):
+        if args[:2] == ("worktree", "remove"):
+            real_rmtree(repo / ".git" / "worktrees", ignore_errors=True)
+            return sp.CompletedProcess(args, 1, "", "Permission denied")
+        return real(cwd, *args, **kwargs)
+
+    monkeypatch.setattr(gitwork, "_git", flaky)
+    monkeypatch.setattr(gitwork.time, "sleep", lambda _: None)
+
+
+def test_files_git_could_not_delete_are_deleted_after_a_wait(world, monkeypatch):
+    made = world.worktree()
+    (made.path / "obj").mkdir()
+    (made.path / "obj" / "locked.dll").write_text("x")
+    lose_the_registration_but_keep_the_files(monkeypatch, world.repo)
+    done = remove_worktree(world.repo, "ADLC-013", force=True)
+    assert (done.worktree_removed, done.branch_deleted) == (True, True)
+    assert not made.path.exists()
+    assert g(world.repo, "branch", "--list", made.branch) == ""
+
+
+def test_a_folder_that_stays_locked_is_reported_and_the_branch_is_kept(world, monkeypatch):
+    from adlc import gitwork
+
+    made = world.worktree()
+    lose_the_registration_but_keep_the_files(monkeypatch, world.repo)
+
+    def locked(path, **handler):
+        raise PermissionError("in use")
+
+    monkeypatch.setattr(gitwork.shutil, "rmtree", locked)
+    with pytest.raises(CommandError, match="could not be fully deleted"):
+        remove_worktree(world.repo, "ADLC-013", force=True)
+    assert g(world.repo, "branch", "--list", made.branch) != ""
+
+
+def test_a_failing_remove_of_a_registered_worktree_reports_gits_reason(world, monkeypatch):
+    import subprocess as sp
+
+    from adlc import gitwork
+
+    world.worktree()
+    real = gitwork._git
+
+    def failing(cwd, *args, **kwargs):
+        if args[:2] == ("worktree", "remove"):
+            if kwargs.get("check", True):
+                raise CommandError("git worktree remove failed: it is locked")
+            return sp.CompletedProcess(args, 1, "", "locked")
+        return real(cwd, *args, **kwargs)
+
+    monkeypatch.setattr(gitwork, "_git", failing)
+    monkeypatch.setattr(gitwork.time, "sleep", lambda _: None)
+    with pytest.raises(CommandError, match="it is locked"):
+        remove_worktree(world.repo, "ADLC-013", force=True)
