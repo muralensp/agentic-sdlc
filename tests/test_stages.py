@@ -260,3 +260,35 @@ def test_a_duplicated_skill_with_no_pin_falls_back_instead_of_refusing(repo, ski
     make_skill(skills, "tdd", "other copy" + chr(10), group="h")
     got = run(repo, "implement")
     assert got.source == "fallback" and "ambiguous" in got.reason and "not pinned" in got.reason
+
+
+# --- the Tester's stage by task type (ADLC-017) -------------------------------------------------
+
+
+def test_a_bugfix_task_starts_with_the_diagnosis_method():
+    from adlc.stages import tester_stage
+
+    assert tester_stage("bugfix") == "diagnose"
+    assert tester_stage("hotfix") == "diagnose"
+
+
+def test_other_tasks_use_the_tdd_stage():
+    from adlc.stages import tester_stage
+
+    assert {tester_stage(t) for t in ("feature", "refactor", "spike", "docs", "test")} == {
+        "implement"
+    }
+
+
+def test_a_bugfix_tester_must_reproduce_the_bug_with_a_failing_test_and_not_fix_it():
+    from adlc.stages import tester_instructions
+
+    text = tester_instructions("bugfix")
+    assert "reproduc" in text and "fail" in text and "not fix" in text
+
+
+def test_a_feature_tester_writes_tests_for_the_criteria():
+    from adlc.stages import tester_instructions
+
+    assert "acceptance criteria" in tester_instructions("feature")
+    assert "reproduc" not in tester_instructions("feature")

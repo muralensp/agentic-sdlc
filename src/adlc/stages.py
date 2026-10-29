@@ -20,6 +20,26 @@ NOTICE = (
     "allowed by AGENTS.md and the config apply, and the orchestrator checks every change."
 )
 
+REPRODUCE_FIRST = frozenset({"bugfix", "hotfix"})  # tasks that start from a bug report
+TESTER_JOB = (
+    "Write failing tests from the acceptance criteria before any code exists. Write tests only, "
+    "never production code."
+)
+REPRODUCER_JOB = (
+    "This task fixes a bug. Write a test that reproduces it and fails for the reason the brief "
+    "describes, before any fix exists. Write the test only; do not fix the bug."
+)
+
+
+def tester_stage(task_type: str) -> str:
+    """The method stage for the Tester: diagnosis (reproduce first) for bugs, else `implement`."""
+    return "diagnose" if task_type in REPRODUCE_FIRST else "implement"
+
+
+def tester_instructions(task_type: str) -> str:
+    """What the Tester is asked to do; a bug fix begins with a reproducing test."""
+    return REPRODUCER_JOB if task_type in REPRODUCE_FIRST else TESTER_JOB
+
 
 class MethodRefused(Exception):
     """No method can be used for the stage, and the reason says why."""
