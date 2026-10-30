@@ -1,13 +1,17 @@
 # Changelog
 
-Generated from git history by `.claude/skills/changelog/generate.py`. Do not edit by hand;
-merge commits are omitted. Newest date first.
+Generated from git history by `.claude/skills/changelog/generate.py`.
+Do not edit by hand; merge commits are omitted. Newest date first.
 
 ## 2026-10-30
 
 ### Features
 
 - **review**: Reviewer agent with two-axis verdict and gate checklists (`494bd2f`)
+
+### Documentation
+
+- **changelog**: add CHANGELOG.md and a skill to regenerate it from git history (`ef952c9`)
 
 ## 2026-10-29
 

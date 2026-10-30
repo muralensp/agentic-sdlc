@@ -23,7 +23,9 @@ TYPE_TITLES = {
     "chore": "Chores",
     "other": "Other",
 }
-CONVENTIONAL = re.compile(r"^(?P<type>[a-z]+)(?:\((?P<scope>[^)]+)\))?(?P<bang>!)?: (?P<subject>.+)$")
+CONVENTIONAL = re.compile(
+    r"^(?P<type>[a-z]+)(?:\((?P<scope>[^)]+)\))?(?P<bang>!)?: (?P<subject>.+)$"
+)
 
 
 def git_log(ref: str) -> list[tuple[str, str, str]]:
@@ -56,8 +58,8 @@ def render(rows: list[tuple[str, str, str]]) -> str:
     lines = [
         "# Changelog",
         "",
-        "Generated from git history by `.claude/skills/changelog/generate.py`. Do not edit by hand;",
-        "merge commits are omitted. Newest date first.",
+        "Generated from git history by `.claude/skills/changelog/generate.py`.",
+        "Do not edit by hand; merge commits are omitted. Newest date first.",
         "",
     ]
     for date in sorted(by_date, reverse=True):
