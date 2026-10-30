@@ -55,6 +55,7 @@ class Limits:
     max_task_minutes: int
     max_cost_usd: float | None
     max_tasks_per_window: int
+    max_index_lines: int = 150
 
 
 @dataclass(frozen=True)
@@ -128,6 +129,7 @@ SCHEMA: dict = {
         "max_task_minutes": ("int", 1, 240),
         "max_cost_usd": ("positive?",),
         "max_tasks_per_window": ("int", 1, 1000),
+        "max_index_lines": ("int", 1, 10_000),
     },
     "models": {k: ("str?",) for k in ("coder", "tester", "reviewer", "pr_writer")},
     "dod": ("commands",),
