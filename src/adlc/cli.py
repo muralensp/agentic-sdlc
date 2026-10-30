@@ -30,6 +30,7 @@ from adlc.plan import plan_run, render_plan
 from adlc.pr import GhCli
 from adlc.recovery import handoff, reset, resume
 from adlc.runlog import loop_status
+from adlc.scaffold import STACKS, create_repo, default_code, render_scaffold, scaffold
 from adlc.states import IllegalTransition
 from adlc.tasks import TYPES
 
@@ -108,6 +109,12 @@ def build_parser() -> argparse.ArgumentParser:
     report_cmd = commands.add_parser("report", help="escalation rates and how often you overrode")
     init_cmd = commands.add_parser("init", help="adopt this repository (dry run unless --yes)")
     init_cmd.add_argument("--yes", action="store_true", help="deliver the plan as a branch and PR")
+    new_cmd = commands.add_parser("new", help="scaffold a fresh repository (dry run unless --yes)")
+    new_cmd.add_argument("name", help="lower case words joined by -; names the folder")
+    new_cmd.add_argument("--stack", required=True, choices=STACKS)
+    new_cmd.add_argument("--code", help="board key prefix (default: from the name)")
+    new_cmd.add_argument("--dest", type=Path, default=Path.cwd(), help="parent folder (default: .)")
+    new_cmd.add_argument("--yes", action="store_true", help="create the folder and first commit")
     resume_cmd = commands.add_parser("resume", help="continue an interrupted or paused task")
     resume_cmd.add_argument("--force", action="store_true", help="ignore the usage-window limits")
     reset_cmd = commands.add_parser("reset", help="discard a started task's worktree and branch")
@@ -348,10 +355,30 @@ def run_board_command(args: argparse.Namespace) -> int:
         return 2
 
 
+def run_new(args: argparse.Namespace) -> int:
+    code = args.code or default_code(args.name)
+    try:
+        files = scaffold(args.name, args.stack, code)
+        if not args.yes:
+            print(render_scaffold(args.name, args.stack, list(files)), end="")
+            return 0
+        made = create_repo(args.dest / args.name, args.name, args.stack, code)
+    except CommandError as exc:
+        print(f"adlc: {exc}", file=sys.stderr)
+        return 1
+    print(f"created {made.path} with {len(made.files)} files and one commit on main")
+    print("next: a person creates the remote and protects main, with the wizard:")
+    print(f"  cd {made.path} && bash .adlc/wizards/protect-main.sh --dry-run")
+    print("then run `adlc doctor --baseline` to record which checks pass")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "doctor":
         return run_doctor(args)
+    if args.command == "new":
+        return run_new(args)
     if args.command in _BOARD_COMMANDS:
         return run_board_command(args)
     return 0

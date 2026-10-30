@@ -127,14 +127,18 @@ def _profile_dod(profile: str) -> dict[str, str]:
     return (yaml.safe_load(text) or {}).get("dod") or {}
 
 
-def _missing_scripts(repo: Path, profile: str) -> dict[str, None]:
-    """Profile commands that run a script this repo does not have, to switch off."""
+def missing_scripts(profile: str, exists: Callable[[str], bool]) -> dict[str, None]:
+    """Profile commands that run a script `exists` denies, to switch off."""
     gone = {}
     for name, command in _profile_dod(profile).items():
         scripts = _SCRIPT.findall(command)
-        if scripts and not all((repo / s).is_file() for s in scripts):
+        if scripts and not all(exists(s) for s in scripts):
             gone[name] = None
     return gone
+
+
+def _missing_scripts(repo: Path, profile: str) -> dict[str, None]:
+    return missing_scripts(profile, lambda script: (repo / script).is_file())
 
 
 def _npm_commands(repo: Path) -> dict[str, str]:
