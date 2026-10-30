@@ -122,6 +122,11 @@ def _found(trigger: Trigger, reason: str, evidence: Sequence[str] = ()) -> Escal
     return Escalation(trigger, reason, tuple(evidence), _NEXT_STEP[trigger])
 
 
+def escalation_for(trigger: Trigger, reason: str, evidence: Sequence[str] = ()) -> Escalation:
+    """An escalation for `trigger` with the standard next step for a person."""
+    return _found(trigger, reason, evidence)
+
+
 def evaluate(facts: Facts, settings: Settings) -> list[Escalation]:
     """Every trigger the facts fire, in the order of the table in PRD 8.4a."""
     found: list[Escalation] = []

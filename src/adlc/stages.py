@@ -23,7 +23,8 @@ NOTICE = (
 REPRODUCE_FIRST = frozenset({"bugfix", "hotfix"})  # tasks that start from a bug report
 TESTER_JOB = (
     "Write failing tests from the acceptance criteria before any code exists. Write tests only, "
-    "never production code."
+    "never production code. If the criteria are unclear or contradict each other, write no "
+    "tests and reply with one line starting `SPEC PROBLEM:` and the reason."
 )
 REPRODUCER_JOB = (
     "This task fixes a bug. Write a test that reproduces it and fails for the reason the brief "

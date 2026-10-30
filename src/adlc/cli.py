@@ -36,7 +36,9 @@ from adlc.methods import (
 from adlc.plan import plan_run, render_plan
 from adlc.pr import GhCli
 from adlc.recovery import handoff, reset, resume
+from adlc.run import next_ready_key, render_result, run_task
 from adlc.runlog import loop_status
+from adlc.runner import ClaudeCodeRunner
 from adlc.scaffold import STACKS, create_repo, default_code, render_scaffold, scaffold
 from adlc.states import IllegalTransition
 from adlc.tasks import TYPES
@@ -97,7 +99,8 @@ def build_parser() -> argparse.ArgumentParser:
     status_loop.add_argument("key")
     status_loop.add_argument("--run", type=int, help="a specific run number (default: the newest)")
     run = commands.add_parser("run", help="plan or run a task")
-    run.add_argument("key")
+    run.add_argument("key", nargs="?", help="default: the best ready task")
+    run.add_argument("--max-iterations", type=int, metavar="N", help="cap the fix loop")
     run.add_argument(
         "--dry-run",
         action="store_true",
@@ -273,13 +276,26 @@ def _loop_status(args: argparse.Namespace, repo: Path) -> int:
     return 0
 
 
+def live_runner(settings):
+    """The real agent runner: Claude Code, with the budget the config allows."""
+    return ClaudeCodeRunner(settings.models, max_cost_usd=settings.limits.max_cost_usd)
+
+
 def _run(args: argparse.Namespace, repo: Path) -> int:
-    if not args.dry_run:
-        raise CommandError(
-            "running a task is not built yet; use --dry-run to see its branch and prompts"
-        )
-    print(render_plan(plan_run(repo, args.key, skills_root=args.skills_root)), end="")
-    return 0
+    if args.dry_run:
+        key = args.key or next_ready_key(repo)
+        print(render_plan(plan_run(repo, key, skills_root=args.skills_root)), end="")
+        return 0
+    result = run_task(
+        repo,
+        args.key,
+        runner=live_runner(load_config(repo)),
+        forge=GhCli(),
+        skills_root=args.skills_root,
+        max_iterations=args.max_iterations,
+    )
+    print(render_result(result))
+    return 1 if result.status == "escalated" else 0
 
 
 def _approve(args: argparse.Namespace, repo: Path) -> int:

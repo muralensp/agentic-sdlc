@@ -127,11 +127,11 @@ def test_a_dry_run_changes_nothing_in_git_and_writes_no_log(repo, capsys):
     assert snapshot(repo) == before
 
 
-def test_running_for_real_is_not_built_yet_and_says_so(repo, capsys):
+def test_running_for_real_without_a_baseline_is_refused_and_changes_nothing(repo, capsys):
     before = snapshot(repo)
     code = main(["run", "T-002", "--repo", str(repo)])
     err = capsys.readouterr().err
-    assert code == 1 and "--dry-run" in err
+    assert code == 1 and "doctor --baseline" in err
     assert snapshot(repo) == before
 
 
