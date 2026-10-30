@@ -33,6 +33,8 @@ from adlc.runlog import loop_status
 from adlc.scaffold import STACKS, create_repo, default_code, render_scaffold, scaffold
 from adlc.states import IllegalTransition
 from adlc.tasks import TYPES
+from adlc.trust import enable
+from adlc.trust import status as trust_status
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -115,6 +117,8 @@ def build_parser() -> argparse.ArgumentParser:
     new_cmd.add_argument("--code", help="board key prefix (default: from the name)")
     new_cmd.add_argument("--dest", type=Path, default=Path.cwd(), help="parent folder (default: .)")
     new_cmd.add_argument("--yes", action="store_true", help="create the folder and first commit")
+    trust_cmd = commands.add_parser("trust", help="turn auto-merge on, once it is earned")
+    trust_cmd.add_argument("--yes", action="store_true", help="turn it on (default: report)")
     resume_cmd = commands.add_parser("resume", help="continue an interrupted or paused task")
     resume_cmd.add_argument("--force", action="store_true", help="ignore the usage-window limits")
     reset_cmd = commands.add_parser("reset", help="discard a started task's worktree and branch")
@@ -140,6 +144,7 @@ def build_parser() -> argparse.ArgumentParser:
         reset_cmd,
         handoff_cmd,
         init_cmd,
+        trust_cmd,
     ):
         command.add_argument("--repo", type=Path, help="default: the repository around this folder")
     return parser
@@ -314,6 +319,26 @@ def _init(args: argparse.Namespace, repo: Path) -> int:
     return 0
 
 
+def _trust(args: argparse.Namespace, repo: Path) -> int:
+    got = trust_status(repo)
+    print(f"doctor baseline:         {got.baseline}")
+    print(f"merges approved by hand: {got.merges} of {got.needed}")
+    print(f"auto_merge:              {'on' if got.auto_merge else 'off'}")
+    if got.auto_merge:
+        print("auto-merge is already on")
+        return 0
+    if not got.ready:
+        for reason in got.reasons:
+            print(f"not yet: {reason}")
+        return 1
+    if not args.yes:
+        print("earned. Run `adlc trust --yes` to turn auto_merge on.")
+        return 0
+    enable(repo)
+    print("auto_merge is now on in .adlc/config.yaml")
+    return 0
+
+
 def _handoff(args: argparse.Namespace, repo: Path) -> int:
     print(handoff(repo, args.key).relative_to(repo).as_posix())
     return 0
@@ -335,6 +360,7 @@ _BOARD_COMMANDS = {
     "reset": _reset,
     "handoff": _handoff,
     "init": _init,
+    "trust": _trust,
 }
 
 

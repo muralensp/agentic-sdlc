@@ -70,6 +70,7 @@ class Merge:
     auto_merge: bool
     required_checks: tuple[str, ...]
     method: str
+    trust_after: int = 3  # hand-approved merges before `adlc trust` may work
 
 
 @dataclass(frozen=True)
@@ -121,6 +122,7 @@ SCHEMA: dict = {
         "auto_merge": ("bool",),
         "required_checks": ("strs",),
         "method": ("choice", "squash", "rebase", "merge"),
+        "trust_after": ("int", 1, 100),
     },
     "methods": ("any",),
     "tests": {"paths": ("strs",), "red": ("str?",), "failure_markers": ("strs",)},
@@ -322,6 +324,7 @@ def load_config(repo: str | Path) -> Settings:
             merged["merge"]["auto_merge"],
             tuple(merged["merge"]["required_checks"]),
             merged["merge"]["method"],
+            merged["merge"]["trust_after"],
         ),
         methods=registry,
         tests=Tests(

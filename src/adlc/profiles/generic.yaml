@@ -41,15 +41,29 @@ protected:                   # globs that always escalate (FR-41); a stack profi
   - "**/package-lock.json"
   - "**/requirements*.txt"
   - "**/*.csproj"
+  - "**/go.mod"
+  - "**/go.sum"
+  - "**/Cargo.toml"
+  - "**/Cargo.lock"
+  - "**/pom.xml"
+  - "**/build.gradle*"
+  - "**/Gemfile"
+  - "**/Gemfile.lock"
+  - "**/Pipfile*"
+  - "**/poetry.lock"
+  - "**/yarn.lock"
+  - "**/pnpm-lock.yaml"
   - "**/migrations/**"
   - "**/.env"
   - "**/.env.*"
   - "**/*.pem"
+  - "**/secrets*"
 protected_extra: []
 
 merge:
   auto_merge: false          # a profile may not turn this on; adlc trust does, per repo
   required_checks: []
   method: squash
+  trust_after: 3         # hand-approved merges before `adlc trust` turns auto_merge on
 
 methods: {}
