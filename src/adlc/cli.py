@@ -24,8 +24,10 @@ from adlc.commands import (
 )
 from adlc.config import ConfigError, load_config
 from adlc.escalation import approve, edit, reject, render_report, report, retry
+from adlc.init import adopt, detect, file_plan, gh_protection, render_adoption
 from adlc.methods import MethodsError, check, load_registry, pins_yaml
 from adlc.plan import plan_run, render_plan
+from adlc.pr import GhCli
 from adlc.recovery import handoff, reset, resume
 from adlc.runlog import loop_status
 from adlc.states import IllegalTransition
@@ -104,6 +106,8 @@ def build_parser() -> argparse.ArgumentParser:
     for command in (approve_cmd, retry_cmd, edit_cmd, reject_cmd):
         command.add_argument("key")
     report_cmd = commands.add_parser("report", help="escalation rates and how often you overrode")
+    init_cmd = commands.add_parser("init", help="adopt this repository (dry run unless --yes)")
+    init_cmd.add_argument("--yes", action="store_true", help="deliver the plan as a branch and PR")
     resume_cmd = commands.add_parser("resume", help="continue an interrupted or paused task")
     resume_cmd.add_argument("--force", action="store_true", help="ignore the usage-window limits")
     reset_cmd = commands.add_parser("reset", help="discard a started task's worktree and branch")
@@ -128,6 +132,7 @@ def build_parser() -> argparse.ArgumentParser:
         resume_cmd,
         reset_cmd,
         handoff_cmd,
+        init_cmd,
     ):
         command.add_argument("--repo", type=Path, help="default: the repository around this folder")
     return parser
@@ -289,6 +294,19 @@ def _reset(args: argparse.Namespace, repo: Path) -> int:
     return 0
 
 
+def _init(args: argparse.Namespace, repo: Path) -> int:
+    protection = gh_protection(repo)
+    if not args.yes:
+        found = detect(repo, protection=protection)
+        print(render_adoption(found, file_plan(repo, found)), end="")
+        return 0
+    done = adopt(repo, confirm=True, forge=GhCli(), protection=protection)
+    where = done.pr.url if done.pr else f"branch {done.branch}"
+    print(f"adopted: {where}")
+    print("after it merges, run `adlc doctor --baseline` to record which checks already pass")
+    return 0
+
+
 def _handoff(args: argparse.Namespace, repo: Path) -> int:
     print(handoff(repo, args.key).relative_to(repo).as_posix())
     return 0
@@ -309,6 +327,7 @@ _BOARD_COMMANDS = {
     "resume": _resume,
     "reset": _reset,
     "handoff": _handoff,
+    "init": _init,
 }
 
 
