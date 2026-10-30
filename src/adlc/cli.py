@@ -26,6 +26,7 @@ from adlc.config import ConfigError, load_config
 from adlc.escalation import approve, edit, reject, render_report, report, retry
 from adlc.methods import MethodsError, check, load_registry, pins_yaml
 from adlc.plan import plan_run, render_plan
+from adlc.recovery import handoff, reset, resume
 from adlc.runlog import loop_status
 from adlc.states import IllegalTransition
 from adlc.tasks import TYPES
@@ -103,6 +104,15 @@ def build_parser() -> argparse.ArgumentParser:
     for command in (approve_cmd, retry_cmd, edit_cmd, reject_cmd):
         command.add_argument("key")
     report_cmd = commands.add_parser("report", help="escalation rates and how often you overrode")
+    resume_cmd = commands.add_parser("resume", help="continue an interrupted or paused task")
+    resume_cmd.add_argument("--force", action="store_true", help="ignore the usage-window limits")
+    reset_cmd = commands.add_parser("reset", help="discard a started task's worktree and branch")
+    reset_cmd.add_argument(
+        "--yes", action="store_true", help="really delete (nothing is lost without it)"
+    )
+    handoff_cmd = commands.add_parser("handoff", help="write a short resume note for a task")
+    for command in (resume_cmd, reset_cmd, handoff_cmd):
+        command.add_argument("key")
     for command in (
         add,
         status,
@@ -115,6 +125,9 @@ def build_parser() -> argparse.ArgumentParser:
         edit_cmd,
         reject_cmd,
         report_cmd,
+        resume_cmd,
+        reset_cmd,
+        handoff_cmd,
     ):
         command.add_argument("--repo", type=Path, help="default: the repository around this folder")
     return parser
@@ -259,6 +272,28 @@ def _report(args: argparse.Namespace, repo: Path) -> int:
     return 0
 
 
+def _resume(args: argparse.Namespace, repo: Path) -> int:
+    got = resume(repo, args.key, force=args.force)
+    print(f"{got.key}: continue in {got.worktree} on branch {got.branch}")
+    print(f"  progress.md: {'present' if got.progress else 'none yet'}")
+    if got.last_failure:
+        print(f"  last failure: {got.last_failure}")
+    if got.was_paused:
+        print("  the usage-window pause is cleared")
+    return 0
+
+
+def _reset(args: argparse.Namespace, repo: Path) -> int:
+    done = reset(repo, args.key, yes=args.yes)
+    print(f"{args.key} is back in BACKLOG; worktree removed: {done.worktree_removed}")
+    return 0
+
+
+def _handoff(args: argparse.Namespace, repo: Path) -> int:
+    print(handoff(repo, args.key).relative_to(repo).as_posix())
+    return 0
+
+
 _BOARD_COMMANDS = {
     "add": _add,
     "status": _status,
@@ -271,6 +306,9 @@ _BOARD_COMMANDS = {
     "edit": _edit,
     "reject": _reject,
     "report": _report,
+    "resume": _resume,
+    "reset": _reset,
+    "handoff": _handoff,
 }
 
 

@@ -5,11 +5,12 @@ and exit codes. Reading never writes. `add_item` is the only writer and works un
 """
 
 import re
+from datetime import UTC, datetime
 from pathlib import Path
 
 from adlc.board import Board, Row
 from adlc.config import load_config
-from adlc.states import State
+from adlc.states import Actor, State, check_transition, parse_state
 from adlc.tasks import (
     CODE_PATTERN,
     KEY_PATTERN,
@@ -41,6 +42,8 @@ _GROUP_OF = {
     State.DONE: "done",
 }
 _NOTE_WIDTH = 100
+STUCK_FACTOR = 2  # an IN_PROGRESS task idle for this many times max_task_minutes is flagged (FR-13)
+PAUSE_DIR = Path(".adlc") / "pauses"  # a paused task is waiting, not stuck (ADLC-022)
 
 
 class CommandError(Exception):
@@ -67,6 +70,31 @@ def locations(repo: Path) -> tuple[Path, Path, str]:
     settings = load_config(repo)
     briefs = settings.board.briefs.strip("/")
     return repo / settings.board.path, repo / briefs, briefs
+
+
+def row_state(repo: Path, key: str) -> State:
+    """The board's state for `key`."""
+    board_path, _, _ = locations(repo)
+    for row in Board(board_path).rows():
+        if row.key == key:
+            return parse_state(_cell(row, "status"))
+    raise CommandError(f"{key} is not on the board")
+
+
+def update_row(
+    repo: Path, key: str, status: State | None, notes: str, actor: Actor = Actor.ORCHESTRATOR
+) -> None:
+    """Set a row's Status (if given, and legal for `actor`) and Notes under the board lock."""
+    board_path, _, _ = locations(repo)
+    board = Board(board_path)
+    current = row_state(repo, key)
+    change = status is not None and status is not current
+    if change:
+        check_transition(current, status, actor)
+    with board.lock():
+        if change:
+            board.set_cell(key, "Status", status.value)
+        board.set_cell(key, "Notes", " ".join(notes.split()))
 
 
 # --- add --------------------------------------------------------------------------------------
@@ -151,8 +179,19 @@ def add_item(
 # --- status -----------------------------------------------------------------------------------
 
 
-def status_report(repo: Path) -> dict:
+def _idle_minutes(repo: Path, key: str, now: datetime) -> float | None:
+    """Minutes since anything in the newest run folder changed; None if unknown or paused."""
+    run = latest_run(repo, key)
+    if run is None or (repo / PAUSE_DIR / f"{key}.json").is_file():
+        return None
+    newest = max(p.stat().st_mtime for p in [run[1], *run[1].rglob("*")])
+    return (now.timestamp() - newest) / 60
+
+
+def status_report(repo: Path, now: datetime | None = None) -> dict:
     """Every board item with its state, group and reason, plus the items with problems."""
+    now = now or datetime.now(UTC)
+    max_idle = STUCK_FACTOR * load_config(repo).limits.max_task_minutes
     board_path, briefs, _ = locations(repo)
     rows = Board(board_path).rows()
     loaded = load_tasks(board_path, briefs)
@@ -179,6 +218,13 @@ def status_report(repo: Path) -> dict:
                 group, reason = "problem", bad.get(row.key, "not selectable")
         else:
             group, reason = _GROUP_OF[state], _cell(row, "notes")
+            idle = _idle_minutes(repo, row.key, now) if state is State.IN_PROGRESS else None
+            if idle is not None and idle > max_idle:
+                group = "attention"
+                reason = (
+                    f"no activity for {int(idle)} min (limit {max_idle}); "
+                    f"try `adlc resume {row.key}` or `adlc reset {row.key}`"
+                )
         items[row.key] = {
             "key": row.key,
             "title": _cell(row, "title"),
