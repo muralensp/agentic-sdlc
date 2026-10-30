@@ -51,4 +51,4 @@ detail belongs in `PRD.md`, `docs/WORK-ITEM-WALKTHROUGH.md`, and the run logs. M
 
 ## Status
 
-ADLC-001 to ADLC-020 and ADLC-032 are DONE (scaffold, branch protection, doctor, board, state machine, config, CLI, profiles, method injection, refine, baseline, agent runner, git worktrees, DoD verify, Tester red phase, Ralph loop, diagnosis iteration, run logs, Reviewer, escalation); `main` is protected. Next: ADLC-021. `docs/WORK-ITEMS.md` is the source of truth for status.
+ADLC-001 to ADLC-021 and ADLC-032 are DONE (scaffold, branch protection, doctor, board, state machine, config, CLI, profiles, method injection, refine, baseline, agent runner, git worktrees, DoD verify, Tester red phase, Ralph loop, diagnosis iteration, run logs, Reviewer, escalation, PR step); `main` is protected. Next: ADLC-022. `docs/WORK-ITEMS.md` is the source of truth for status.
