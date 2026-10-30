@@ -6,6 +6,7 @@ the runner only reports what happened. It never raises for a bad run, only for a
 not be made (a reviewer on the coder's model) or a machine that cannot make it (no `claude`).
 """
 
+import dataclasses
 import json
 import os
 import re
@@ -80,6 +81,7 @@ class AgentResult:
     duration: float = 0.0  # seconds, measured by the runner
     exit_code: int | None = None
     rate_limit: RateLimit | None = None
+    commands: tuple[str, ...] = ()  # the shell commands the agent ran, from its stream
     raw: Mapping[str, Any] = field(default_factory=dict)  # the final result event
 
 
@@ -143,6 +145,38 @@ def _events(stdout: str) -> list[dict[str, Any]]:
         if isinstance(event, dict):
             events.append(event)
     return events
+
+
+_CREDENTIAL_NAME = re.compile(
+    r"(?i)token|secret|passw|credential|api[_-]?key|private[_-]?key|^(aws|azure|gh|github)_"
+)
+_KEEP_ENV = re.compile(r"^(ANTHROPIC|CLAUDE)_")  # what Claude Code needs to log in
+
+
+def agent_env(environ: Mapping[str, str]) -> dict[str, str]:
+    """The environment an agent gets: no credentials but Claude Code's own (FR-17)."""
+    return {
+        name: value
+        for name, value in environ.items()
+        if _KEEP_ENV.match(name) or not _CREDENTIAL_NAME.search(name)
+    }
+
+
+def commands_from(events: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
+    """The shell commands an agent ran, in order, read from its `stream-json` events."""
+    found = []
+    for event in events:
+        message = event.get("message") if event.get("type") == "assistant" else None
+        for block in (message or {}).get("content") or ():
+            if (
+                isinstance(block, dict)
+                and block.get("type") == "tool_use"
+                and block.get("name") == "Bash"
+            ):
+                command = (block.get("input") or {}).get("command")
+                if isinstance(command, str):
+                    found.append(command)
+    return tuple(found)
 
 
 def _text(data: bytes) -> str:
@@ -214,6 +248,7 @@ class ClaudeCodeRunner:
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                env=agent_env(os.environ),
                 **extra,
             )
         except OSError as exc:
@@ -237,6 +272,7 @@ class ClaudeCodeRunner:
         result = self._judge(
             request, events, stdout, stderr, process.returncode, timed_out, duration
         )
+        result = dataclasses.replace(result, commands=commands_from(events))
         if result.status == "rate_limited":
             self._keep_sample(request, events, stdout, stderr)
         return result

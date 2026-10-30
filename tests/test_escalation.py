@@ -78,6 +78,7 @@ def test_a_clean_task_raises_nothing(settings):
         (Stop.REVIEW_ESCALATED, Trigger.REVIEW_UNRESOLVED),
         (Stop.REVIEW_ROUNDS, Trigger.REVIEW_UNRESOLVED),
         (Stop.GUARDRAIL, Trigger.PROTECTED_AREA),
+        (Stop.FORBIDDEN_COMMAND, Trigger.GUARDRAIL),
         (Stop.TEST_PROTECTION, Trigger.TEST_INTEGRITY),
         (Stop.TEST_PROPOSAL, Trigger.TEST_INTEGRITY),
     ],

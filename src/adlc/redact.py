@@ -32,3 +32,26 @@ def redact(text: str) -> str:
     text = _BEARER.sub(rf"\1 {REDACTED}", text)
     text = _ASSIGNED.sub(rf"\1\2{REDACTED}", text)
     return _URL_LOGIN.sub(rf"\1{REDACTED}@", text)
+
+
+def _luhn(digits: str) -> bool:
+    total = 0
+    for i, ch in enumerate(reversed(digits)):
+        n = int(ch)
+        if i % 2:
+            n = n * 2 - 9 if n > 4 else n * 2
+        total += n
+    return total % 10 == 0
+
+
+_CARD = re.compile(r"(?<![\d-])(?:\d[ -]?){12,18}\d(?![\d-])")
+
+
+def redact_pans(text: str) -> str:
+    """Remove card numbers: 13 to 19 digits, spaces or dashes allowed, that pass the Luhn check."""
+
+    def swap(match: re.Match[str]) -> str:
+        digits = re.sub(r"\D", "", match.group(0))
+        return REDACTED if 13 <= len(digits) <= 19 and _luhn(digits) else match.group(0)
+
+    return _CARD.sub(swap, text)

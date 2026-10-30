@@ -66,4 +66,39 @@ merge:
   method: squash
   trust_after: 3         # hand-approved merges before `adlc trust` turns auto_merge on
 
+guardrails:                  # enforced by the orchestrator, not left to the model (FR-15)
+  coder_paths: []            # globs the Coder may change; empty means anything not protected
+  allowed_commands: []       # if set, the only shell commands an agent may run (prefixes)
+  forbidden_commands:        # no network, installs, publishing or privilege (FR-17)
+    - curl
+    - wget
+    - ssh
+    - scp
+    - sftp
+    - nc
+    - ncat
+    - telnet
+    - ftp
+    - sudo
+    - su
+    - gh
+    - git push
+    - git pull
+    - git fetch
+    - git clone
+    - git remote
+    - pip install
+    - pip3 install
+    - npm install
+    - npm i
+    - yarn add
+    - pnpm add
+    - dotnet add
+    - dotnet restore
+    - nuget install
+
+scrub:                       # removed from prompts and logs (FR-16)
+  pan: true                  # card numbers: 13 to 19 digits that pass the Luhn check
+  patterns: []               # extra regular expressions for personal data
+
 methods: {}
