@@ -36,6 +36,7 @@ from adlc.runner import AgentRequest, AgentRunner, Role
 from adlc.stages import MethodRefused, resolve
 from adlc.states import Actor, State, check_transition
 from adlc.tasks import parse_brief
+from adlc.trust import record_hand_merge
 
 PASS, FAIL, PENDING = "pass", "fail", "pending"
 REQUIRED_SECTIONS = ("Summary", "Impacted modules", "Tests", "Risks")
@@ -468,5 +469,7 @@ def deliver(
     remove_worktree(repo, key, force=True, root=worktree.parent)
     done = f"Merged PR #{pr.number}: {pr.url}." + (f" Log: {run_log}" if run_log else "")
     _note(repo, key, State.DONE, done, Actor.HUMAN if approved else Actor.ORCHESTRATOR)
+    if approved:
+        record_hand_merge(repo, key, pr.number, pr.url)  # counts towards `adlc trust`
     (Path(repo) / STORE / f"{key}.json").unlink(missing_ok=True)
     return Delivery("merged", pr)
