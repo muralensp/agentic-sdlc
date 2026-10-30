@@ -36,4 +36,4 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.setuptools.package-data]
-adlc = ["profiles/*.yaml", "fallbacks/*.md"]
+adlc = ["profiles/*.yaml", "fallbacks/*.md", "templates/*.sh"]
