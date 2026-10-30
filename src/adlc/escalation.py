@@ -260,6 +260,12 @@ def _row_state(board: Board, key: str) -> State:
     raise CommandError(f"{key} is not on the board")
 
 
+def task_state(repo: Path, key: str) -> State:
+    """The board's state for `key`."""
+    board_path, _, _ = locations(repo)
+    return _row_state(Board(board_path), key)
+
+
 def _set(board: Board, key: str, status: State | None, notes: str) -> None:
     with board.lock():
         if status is not None:
