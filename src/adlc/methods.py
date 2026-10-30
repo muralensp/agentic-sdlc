@@ -217,6 +217,69 @@ def inspect(
     return _check_method(registry[stage], repo, roots, note)
 
 
+# --- what an agent always loads, and what a skill says (FR-33, FR-37) -------------------------
+
+INDEX_FILES = ("CLAUDE.md", "AGENTS.md")
+_SCRIPT_SUFFIXES = {".sh", ".bash", ".ps1", ".bat", ".cmd", ".py", ".js", ".rb", ".pl", ".exe"}
+_OVERRIDE = re.compile(
+    r"(?i)\b(ignore|disregard|forget)\s+(all|any|your|the|previous|prior|above)\b"
+    r"[^.\n]{0,30}\b(instructions?|rules?|guidelines?)\b"
+)
+_PIPE_TO_SHELL = re.compile(r"(?i)\b(curl|wget)\b[^\n|]*\|\s*(sudo\s+)?(ba|z)?sh\b")
+_TOOL_GRANT = re.compile(r"(?im)^\s*allowed[-_]tools\s*:")
+
+
+def _line_count(path: Path) -> int:
+    return len(path.read_bytes().decode("utf-8", errors="replace").splitlines())
+
+
+def index_warnings(repo: Path, max_lines: int) -> list[str]:
+    """Always-loaded files over `max_lines`: CLAUDE.md, AGENTS.md and project skills (FR-37)."""
+    repo = Path(repo)
+    files = [repo / name for name in INDEX_FILES]
+    files += sorted((repo / ".claude" / "skills").glob("*/SKILL.md"))
+    found = []
+    for path in files:
+        if path.is_file() and (count := _line_count(path)) > max_lines:
+            found.append(
+                f"{path.relative_to(repo).as_posix()} has {count} lines, over the limit of "
+                f"{max_lines}; keep always-loaded files short (writing-for-agents)"
+            )
+    return found
+
+
+def skill_warnings(folder: Path) -> list[str]:
+    """Things in a skill a person should read before pinning it. Advice, not a verdict."""
+    folder = Path(folder)
+    found = []
+    skill = folder / "SKILL.md"
+    text = skill.read_bytes().decode("utf-8", errors="replace") if skill.is_file() else ""
+    if _OVERRIDE.search(text):
+        found.append("SKILL.md tells the agent to ignore or disregard its rules")
+    if _PIPE_TO_SHELL.search(text):
+        found.append("SKILL.md pipes a download into a shell")
+    if _TOOL_GRANT.search(text):
+        found.append("SKILL.md asks for tool permissions (allowed-tools); ADLC ignores them")
+    for path in sorted(folder.rglob("*")):
+        if path.is_file() and path.suffix.lower() in _SCRIPT_SUFFIXES:
+            found.append(f"ships a script: {path.relative_to(folder).as_posix()}")
+    return found
+
+
+def supply_chain_warnings(
+    registry: Registry, repo: Path, skills_root: Path | None = None
+) -> list[str]:
+    """`skill_warnings` for every skill the registry finds, labelled with its stage."""
+    found = []
+    for stage in registry:
+        _, folder = inspect(registry, repo, stage, skills_root)
+        if folder is not None:
+            found += [
+                f"skill {registry[stage].skill} ({stage}): {w}" for w in skill_warnings(folder)
+            ]
+    return found
+
+
 def pins_yaml(registry: Registry, repo: Path, skills_root: Path | None = None) -> str:
     """A `methods:` block with the current hashes, for a person to review and commit."""
     roots, _ = _plugin_roots(registry, skills_root)

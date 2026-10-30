@@ -19,6 +19,7 @@ limits:
   max_task_minutes: 30
   max_cost_usd: null         # only meaningful with an API key
   max_tasks_per_window: 3    # Claude Code Pro usage window
+  max_index_lines: 150       # `adlc doctor` warns when CLAUDE.md, AGENTS.md or a skill is longer
 
 models:                      # unset: the runner's default; reviewer must differ from coder
   coder: null
@@ -36,6 +37,9 @@ dod: {}                      # name: command, filled in by a stack profile
 protected:                   # globs that always escalate (FR-41); a stack profile adds to these
   - ".github/**"
   - ".adlc/**"
+  - ".claude/**"            # skills, agents, hooks and settings the agents load
+  - "CLAUDE.md"
+  - "**/AGENTS.md"
   - "**/pyproject.toml"
   - "**/package.json"
   - "**/package-lock.json"

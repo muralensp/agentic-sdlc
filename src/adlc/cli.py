@@ -25,7 +25,14 @@ from adlc.commands import (
 from adlc.config import ConfigError, load_config
 from adlc.escalation import approve, edit, reject, render_report, report, retry
 from adlc.init import adopt, detect, file_plan, gh_protection, render_adoption
-from adlc.methods import MethodsError, check, load_registry, pins_yaml
+from adlc.methods import (
+    MethodsError,
+    check,
+    index_warnings,
+    load_registry,
+    pins_yaml,
+    supply_chain_warnings,
+)
 from adlc.plan import plan_run, render_plan
 from adlc.pr import GhCli
 from adlc.recovery import handoff, reset, resume
@@ -184,6 +191,18 @@ def run_baseline(args: argparse.Namespace) -> int:
     return 0 if len(passed) == len(ran) else 1
 
 
+def _advice(args: argparse.Namespace, registry) -> list[str]:
+    """Warnings that do not fail the doctor: risky skill text and over-long index files."""
+    try:
+        limit = load_config(args.repo).limits.max_index_lines
+    except ConfigError:
+        limit = 150
+    return [
+        *supply_chain_warnings(registry, args.repo, args.skills_root),
+        *index_warnings(args.repo, limit),
+    ]
+
+
 def run_doctor(args: argparse.Namespace) -> int:
     if args.baseline:
         return run_baseline(args)
@@ -203,6 +222,8 @@ def run_doctor(args: argparse.Namespace) -> int:
             f"{r.stage:<15}{r.skill:<22}{r.status:<15}{'yes' if r.required else 'no':<10}"
             f"{'yes' if r.fallback else 'no'}" + (f"   {r.detail}" if r.detail else "")
         )
+    for warning in _advice(args, registry):
+        print(f"WARN  {warning}")
     bad = [r for r in results if not r.ok]
     print(
         f"\n{len(results) - len(bad)} of {len(results)} methods ok"
