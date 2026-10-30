@@ -170,6 +170,15 @@ def test_scripts_are_committed_as_executable(tmp_path):
     assert modes["CLAUDE.md"] == "100644"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows has no executable bit on disk")
+def test_scripts_are_executable_on_disk_so_the_tree_is_clean(tmp_path):
+    dest = tmp_path / "demo"
+    create_repo(dest, "demo", "dotnet", "DEMO")
+    assert os.access(dest / ".adlc" / "wizards" / "protect-main.sh", os.X_OK)
+    assert os.access(dest / "build" / "scripts" / "test.sh", os.X_OK)
+    assert g(dest, "status", "--porcelain") == ""
+
+
 def test_create_never_runs_the_wizard_or_adds_a_remote(tmp_path):
     dest = tmp_path / "demo"
     create_repo(dest, "demo", "python", "DEMO")

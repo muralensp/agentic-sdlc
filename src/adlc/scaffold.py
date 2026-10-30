@@ -550,9 +550,11 @@ def create_repo(dest: Path, name: str, stack: str, code: str) -> Created:
         target = dest / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(text.encode("utf-8"))
+    scripts = [p for p in files if p.endswith(_EXECUTABLE)]
+    for script in scripts:
+        (dest / script).chmod(0o755)  # on disk too, or Linux sees the index change as an edit
     _git(dest, "init", "-q", "-b", "main")
     _git(dest, "add", "-A")
-    scripts = [p for p in files if p.endswith(_EXECUTABLE)]
     _git(dest, "update-index", "--chmod=+x", *scripts)
     _git(dest, "commit", "-q", "-m", f"chore: scaffold {name} with adlc new")
     return Created(dest, tuple(files))
