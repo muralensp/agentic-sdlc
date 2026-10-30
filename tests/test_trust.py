@@ -18,6 +18,13 @@ from test_commands import make_repo
 from test_pr import PASS, make_scenario, run
 
 
+@pytest.fixture(autouse=True)
+def identity(monkeypatch):
+    for who in ("AUTHOR", "COMMITTER"):
+        monkeypatch.setenv(f"GIT_{who}_NAME", "Test User")
+        monkeypatch.setenv(f"GIT_{who}_EMAIL", "test@example.com")
+
+
 def write_config(repo: Path, text: str) -> None:
     (repo / ".adlc").mkdir(exist_ok=True)
     (repo / ".adlc" / "config.yaml").write_text(text, encoding="utf-8", newline="")
