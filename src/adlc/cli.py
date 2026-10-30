@@ -23,9 +23,11 @@ from adlc.commands import (
     status_report,
 )
 from adlc.config import ConfigError, load_config
+from adlc.escalation import approve, edit, reject, render_report, report, retry
 from adlc.methods import MethodsError, check, load_registry, pins_yaml
 from adlc.plan import plan_run, render_plan
 from adlc.runlog import loop_status
+from adlc.states import IllegalTransition
 from adlc.tasks import TYPES
 
 
@@ -89,7 +91,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="show the task, branch and prompts without calling a model or touching git",
     )
     run.add_argument("--skills-root", type=Path, help="where plugin skills are installed")
-    for command in (add, status, log, refine, status_loop, run):
+    approve_cmd = commands.add_parser("approve", help="let an escalated task merge as it is")
+    retry_cmd = commands.add_parser("retry", help="run an escalated task again, with a note")
+    retry_cmd.add_argument("--note", help="feedback carried into the next run")
+    retry_cmd.add_argument(
+        "--refine", action="store_true", help="reopen the grilling session (spec problems)"
+    )
+    edit_cmd = commands.add_parser("edit", help="send an escalated task back to DRAFT to change it")
+    reject_cmd = commands.add_parser("reject", help="give up on an escalated task (FAILED)")
+    reject_cmd.add_argument("--reason", default="", help="why, for the board's Notes")
+    for command in (approve_cmd, retry_cmd, edit_cmd, reject_cmd):
+        command.add_argument("key")
+    report_cmd = commands.add_parser("report", help="escalation rates and how often you overrode")
+    for command in (
+        add,
+        status,
+        log,
+        refine,
+        status_loop,
+        run,
+        approve_cmd,
+        retry_cmd,
+        edit_cmd,
+        reject_cmd,
+        report_cmd,
+    ):
         command.add_argument("--repo", type=Path, help="default: the repository around this folder")
     return parser
 
@@ -205,6 +231,34 @@ def _run(args: argparse.Namespace, repo: Path) -> int:
     return 0
 
 
+def _approve(args: argparse.Namespace, repo: Path) -> int:
+    approve(repo, args.key)
+    print(f"{args.key} approved; it stays NEEDS_HUMAN until the PR step merges it")
+    return 0
+
+
+def _retry(args: argparse.Namespace, repo: Path) -> int:
+    retry(repo, args.key, note=args.note, refine=args.refine)
+    print(f"{args.key} will run again with a fresh budget")
+    return 0
+
+
+def _edit(args: argparse.Namespace, repo: Path) -> int:
+    print(f"{args.key} is DRAFT again; change {edit(repo, args.key)}, then move it to BACKLOG")
+    return 0
+
+
+def _reject(args: argparse.Namespace, repo: Path) -> int:
+    reject(repo, args.key, reason=args.reason)
+    print(f"{args.key} is FAILED")
+    return 0
+
+
+def _report(args: argparse.Namespace, repo: Path) -> int:
+    print(render_report(report(repo)), end="")
+    return 0
+
+
 _BOARD_COMMANDS = {
     "add": _add,
     "status": _status,
@@ -212,6 +266,11 @@ _BOARD_COMMANDS = {
     "refine": _refine,
     "loop-status": _loop_status,
     "run": _run,
+    "approve": _approve,
+    "retry": _retry,
+    "edit": _edit,
+    "reject": _reject,
+    "report": _report,
 }
 
 
@@ -219,7 +278,7 @@ def run_board_command(args: argparse.Namespace) -> int:
     try:
         repo = args.repo or find_repo(Path.cwd())
         return _BOARD_COMMANDS[args.command](args, repo)
-    except CommandError as exc:
+    except (CommandError, IllegalTransition) as exc:
         print(f"adlc: {exc}", file=sys.stderr)
         return 1
     except ConfigError as exc:
