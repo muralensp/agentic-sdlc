@@ -12,6 +12,7 @@ from pathlib import Path
 
 from adlc import __version__
 from adlc import refine as refine_module
+from adlc.assets import role_problems
 from adlc.baseline import STORE, take_baseline
 from adlc.board import BoardError
 from adlc.commands import (
@@ -121,12 +122,23 @@ def build_parser() -> argparse.ArgumentParser:
     report_cmd = commands.add_parser("report", help="escalation rates and how often you overrode")
     init_cmd = commands.add_parser("init", help="adopt this repository (dry run unless --yes)")
     init_cmd.add_argument("--yes", action="store_true", help="deliver the plan as a branch and PR")
+    init_cmd.add_argument(
+        "--claude-assets",
+        action="store_true",
+        help="also add the .claude/ subagents, hook and rules",
+    )
     new_cmd = commands.add_parser("new", help="scaffold a fresh repository (dry run unless --yes)")
     new_cmd.add_argument("name", help="lower case words joined by -; names the folder")
     new_cmd.add_argument("--stack", required=True, choices=STACKS)
     new_cmd.add_argument("--code", help="board key prefix (default: from the name)")
     new_cmd.add_argument("--dest", type=Path, default=Path.cwd(), help="parent folder (default: .)")
     new_cmd.add_argument("--yes", action="store_true", help="create the folder and first commit")
+    new_cmd.add_argument(
+        "--claude-assets",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="include the .claude/ subagents, hook and rules (default: yes)",
+    )
     trust_cmd = commands.add_parser("trust", help="turn auto-merge on, once it is earned")
     trust_cmd.add_argument("--yes", action="store_true", help="turn it on (default: report)")
     resume_cmd = commands.add_parser("resume", help="continue an interrupted or paused task")
@@ -228,11 +240,14 @@ def run_doctor(args: argparse.Namespace) -> int:
     for warning in _advice(args, registry):
         print(f"WARN  {warning}")
     bad = [r for r in results if not r.ok]
+    roles = role_problems(args.repo)
+    for problem in roles:
+        print(f"FAIL  {problem}")
     print(
         f"\n{len(results) - len(bad)} of {len(results)} methods ok"
-        + ("" if not bad else "; FAILED")
+        + ("" if not (bad or roles) else "; FAILED")
     )
-    return 1 if bad else 0
+    return 1 if bad or roles else 0
 
 
 def _add(args: argparse.Namespace, repo: Path) -> int:
@@ -347,9 +362,11 @@ def _init(args: argparse.Namespace, repo: Path) -> int:
     protection = gh_protection(repo)
     if not args.yes:
         found = detect(repo, protection=protection)
-        print(render_adoption(found, file_plan(repo, found)), end="")
+        print(render_adoption(found, file_plan(repo, found, args.claude_assets)), end="")
         return 0
-    done = adopt(repo, confirm=True, forge=GhCli(), protection=protection)
+    done = adopt(
+        repo, confirm=True, forge=GhCli(), protection=protection, claude_assets=args.claude_assets
+    )
     where = done.pr.url if done.pr else f"branch {done.branch}"
     print(f"adopted: {where}")
     print("after it merges, run `adlc doctor --baseline` to record which checks already pass")
@@ -421,11 +438,11 @@ def run_board_command(args: argparse.Namespace) -> int:
 def run_new(args: argparse.Namespace) -> int:
     code = args.code or default_code(args.name)
     try:
-        files = scaffold(args.name, args.stack, code)
+        files = scaffold(args.name, args.stack, code, args.claude_assets)
         if not args.yes:
             print(render_scaffold(args.name, args.stack, list(files)), end="")
             return 0
-        made = create_repo(args.dest / args.name, args.name, args.stack, code)
+        made = create_repo(args.dest / args.name, args.name, args.stack, code, args.claude_assets)
     except CommandError as exc:
         print(f"adlc: {exc}", file=sys.stderr)
         return 1

@@ -14,6 +14,8 @@ from pathlib import Path
 
 import yaml
 
+from adlc import assets
+from adlc.assets import settings_from_config
 from adlc.commands import CommandError
 from adlc.init import _IGNORE, missing_scripts
 from adlc.review import GATES
@@ -486,7 +488,7 @@ _BUILDERS = {"python": _python, "dotnet": _dotnet}
 # --- putting it together ------------------------------------------------------------------------
 
 
-def scaffold(name: str, stack: str, code: str) -> dict[str, str]:
+def scaffold(name: str, stack: str, code: str, claude_assets: bool = True) -> dict[str, str]:
     """Every file of a new repository, as {path: text}."""
     if not _NAME.match(name):
         raise ScaffoldError(
@@ -519,6 +521,9 @@ def scaffold(name: str, stack: str, code: str) -> dict[str, str]:
     )
     files.update(dict(_gate_file(gate) for gate in GATES))
     files[".adlc/config.yaml"] = _config(stack, code, set(files))
+    if claude_assets:
+        settings = settings_from_config(files[".adlc/config.yaml"])
+        files.update(assets.claude_assets(settings))
     return dict(sorted(files.items()))
 
 
@@ -540,10 +545,12 @@ def _git(cwd: Path, *args: str) -> None:
         raise CommandError(f"git {' '.join(args[:2])} failed: {(done.stderr or '').strip()}")
 
 
-def create_repo(dest: Path, name: str, stack: str, code: str) -> Created:
+def create_repo(
+    dest: Path, name: str, stack: str, code: str, claude_assets: bool = True
+) -> Created:
     """Write the scaffold into `dest` (new or empty) and commit it on `main`. No remote."""
     dest = Path(dest)
-    files = scaffold(name, stack, code)
+    files = scaffold(name, stack, code, claude_assets)
     if dest.exists() and (not dest.is_dir() or any(dest.iterdir())):
         raise CommandError(f"{dest} is not empty; choose a new folder")
     for path, text in files.items():

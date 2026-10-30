@@ -38,6 +38,14 @@ class Role(StrEnum):
     PR_WRITER = "pr_writer"
 
 
+AGENT_NAMES = {
+    Role.TESTER: "tester",
+    Role.CODER: "coder",
+    Role.REVIEWER: "reviewer",
+    Role.PR_WRITER: "pr-writer",
+}  # the subagent files `adlc` writes to .claude/agents/ (ADLC-033)
+
+
 @dataclass(frozen=True)
 class AgentRequest:
     role: Role
@@ -211,8 +219,12 @@ class ClaudeCodeRunner:
             args += ["--model", model]
         if method_file:
             args += ["--append-system-prompt-file", method_file]
-        if request.agent:
-            args += ["--agent", request.agent]
+        agent = request.agent
+        if agent is None:
+            known = Path(request.cwd) / ".claude" / "agents" / f"{AGENT_NAMES[request.role]}.md"
+            agent = AGENT_NAMES[request.role] if known.is_file() else None
+        if agent:
+            args += ["--agent", agent]
         if request.allowed_tools:
             args += ["--allowedTools", ",".join(request.allowed_tools)]
         if request.disallowed_tools:

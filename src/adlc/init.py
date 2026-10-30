@@ -18,8 +18,9 @@ from pathlib import Path
 
 import yaml
 
+from adlc import assets
 from adlc.commands import CommandError
-from adlc.config import Git
+from adlc.config import Git, load_config
 from adlc.gitwork import commit, create_worktree, remove_worktree
 from adlc.pr import Forge, PullRequest
 
@@ -236,7 +237,9 @@ def _append(existing: bytes) -> str:
     return text + gap + eol + _POINTER.replace("\n", eol)
 
 
-def file_plan(repo: Path, found: Detection | None = None) -> list[Change]:
+def file_plan(
+    repo: Path, found: Detection | None = None, claude_assets: bool = False
+) -> list[Change]:
     """Every file `adopt` would add or change. Existing files are never replaced."""
     repo = Path(repo)
     found = found or detect(repo)
@@ -249,6 +252,16 @@ def file_plan(repo: Path, found: Detection | None = None) -> list[Change]:
         plan.append(Change("docs/work-items/.gitkeep", "add", "", "folder for task briefs"))
     if not found.glossary:
         plan.append(Change("GLOSSARY.md", "add", _GLOSSARY, "shared terms (was missing)"))
+    if claude_assets:
+        own = repo / ".adlc" / "config.yaml"
+        settings = (
+            load_config(repo)
+            if own.exists()
+            else assets.settings_from_config(propose_config(found))
+        )
+        for path, text in assets.claude_assets(settings).items():
+            if not (repo / path).exists():
+                plan.append(Change(path, "add", text, "Claude Code subagents, hook and rules"))
     claude = repo / "CLAUDE.md"
     if not claude.exists():
         plan.append(Change("CLAUDE.md", "add", _POINTER, "points agents at ADLC"))
@@ -310,13 +323,14 @@ def adopt(
     root: Path | None = None,
     fetch: bool = True,
     protection: Protection | None = None,
+    claude_assets: bool = False,
 ) -> Adoption:
     """Commit the plan on a `docs/adlc-init` branch and open a PR; never touch the base branch."""
     repo = Path(repo)
     if not confirm:
         raise CommandError("adlc init writes nothing until you confirm; pass --yes")
     found = detect(repo, protection=protection)
-    plan = file_plan(repo, found)
+    plan = file_plan(repo, found, claude_assets)
     if not plan:
         raise CommandError("nothing to add: this repository already has everything adlc init adds")
     git = Git(found.base_branch, BRANCH_TYPES, "conventional")
