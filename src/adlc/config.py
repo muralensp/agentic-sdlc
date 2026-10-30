@@ -81,6 +81,19 @@ class Tests:
 
 
 @dataclass(frozen=True)
+class Guardrails:
+    coder_paths: tuple[str, ...]  # allow-list for the Coder; empty: anything not protected
+    allowed_commands: tuple[str, ...]  # if set, the only shell commands an agent may run
+    forbidden_commands: tuple[str, ...]  # never run by an agent
+
+
+@dataclass(frozen=True)
+class Scrub:
+    pan: bool  # remove card numbers (digits that pass the Luhn check)
+    patterns: tuple[str, ...]  # extra regular expressions for personal data
+
+
+@dataclass(frozen=True)
 class Settings:
     board: Board
     git: Git
@@ -92,6 +105,8 @@ class Settings:
     methods: Registry
     tests: Tests
     source: Path | None  # the repo config file, or None when there was none
+    guardrails: Guardrails = Guardrails((), (), ())
+    scrub: Scrub = Scrub(True, ())
 
 
 # --- schema -------------------------------------------------------------------------------------
@@ -124,6 +139,12 @@ SCHEMA: dict = {
         "method": ("choice", "squash", "rebase", "merge"),
         "trust_after": ("int", 1, 100),
     },
+    "guardrails": {
+        "coder_paths": ("strs",),
+        "allowed_commands": ("strs",),
+        "forbidden_commands": ("strs",),
+    },
+    "scrub": {"pan": ("bool",), "patterns": ("strs",)},
     "methods": ("any",),
     "tests": {"paths": ("strs",), "red": ("str?",), "failure_markers": ("strs",)},
 }
@@ -300,6 +321,12 @@ def load_config(repo: str | Path) -> Settings:
         errors.append(
             "models.reviewer: must differ from models.coder (the Reviewer uses a different model)"
         )
+    scrub_block = merged.get("scrub")
+    for pattern in scrub_block.get("patterns", []) if isinstance(scrub_block, dict) else []:
+        try:
+            re.compile(pattern)
+        except (re.error, TypeError) as exc:
+            errors.append(f"scrub.patterns: {pattern!r} is not a valid regular expression ({exc})")
     registry = None
     try:
         registry = build_registry(merged.get("methods") or {})
@@ -333,4 +360,10 @@ def load_config(repo: str | Path) -> Settings:
             tuple(merged["tests"]["failure_markers"]),
         ),
         source=source,
+        guardrails=Guardrails(
+            tuple(merged["guardrails"]["coder_paths"]),
+            tuple(merged["guardrails"]["allowed_commands"]),
+            tuple(merged["guardrails"]["forbidden_commands"]),
+        ),
+        scrub=Scrub(merged["scrub"]["pan"], tuple(merged["scrub"]["patterns"])),
     )

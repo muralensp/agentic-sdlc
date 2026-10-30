@@ -22,6 +22,7 @@ from adlc.commands import CommandError
 from adlc.config import Settings
 from adlc.dod import DEFAULT_TIMEOUT_SECONDS
 from adlc.gitwork import _git, commit
+from adlc.guardrails import command_violations
 from adlc.runlog import render_summary
 from adlc.runner import AgentRequest, AgentResult, AgentRunner, Role
 from adlc.scope import out_of_scope
@@ -62,6 +63,7 @@ class Stop(StrEnum):
     STUCK = "stuck"
     REGRESSION = "regression"
     GUARDRAIL = "guardrail"
+    FORBIDDEN_COMMAND = "forbidden_command"
     TEST_PROTECTION = "test_protection"
     TEST_PROPOSAL = "test_proposal"
     REVIEW_ROUNDS = "review_rounds"
@@ -195,15 +197,17 @@ class _Loop:
             "updated_at": datetime.now(UTC).isoformat(timespec="seconds"),
             "elapsed_seconds": round(elapsed, 3),
             "stop": stop.value if stop else None,
-            "detail": detail,
+            "detail": self.scrub(detail),
             "resets_at": resets_at.isoformat() if resets_at else None,
             "review_rounds": self.review_rounds,
-            "findings": self.findings,
-            "diagnosis": self.diagnosis,
-            "last_signature": signatures[-1] if signatures else "",
+            "findings": self.scrub(self.findings),
+            "diagnosis": self.scrub(self.diagnosis),
+            "last_signature": self.scrub(signatures[-1]) if signatures else "",
             "usage": self.usage(),
             "methods": dict(self.methods or {}),
-            "iterations": [asdict(i) for i in self.iterations],
+            "iterations": [
+                {**asdict(i), "signature": self.scrub(i.signature)} for i in self.iterations
+            ],
         }
         write_atomic(self.record, (json.dumps(document, indent=2) + "\n").encode("utf-8"))
         self.put("summary.md", render_summary(document))
@@ -231,6 +235,10 @@ class _Loop:
             bash=self.bash,
             timeout=self.dod_timeout,
         )
+        for path in sorted(out_dir.glob("*")) if out_dir.is_dir() else ():
+            if path.is_file():  # what the commands printed may hold a secret
+                clean = self.scrub(path.read_bytes().decode("utf-8", errors="replace"))
+                write_atomic(path, clean.encode("utf-8"))
         outputs = {}
         for result, verdict in zip(done.results, done.verdicts, strict=True):
             if verdict.verdict == "new":
@@ -418,10 +426,17 @@ class _Loop:
                 self.log(number, result, reverted=True)
                 continue
 
+            ran = command_violations(result.commands, self.settings.guardrails)
+            if ran:
+                _revert(worktree, checkpoint)
+                self.log(number, result, reverted=True)
+                return self.finish(Stop.FORBIDDEN_COMMAND, "; ".join(ran))
+
             changes = changed_paths(worktree, checkpoint)
             code = [p for p in changes if p != self.progress_file]
             tampered = check_locked(worktree, self.lock)
-            forbidden = out_of_scope(code, self.settings.protected)
+            allowed = self.settings.guardrails.coder_paths or None
+            forbidden = out_of_scope(code, self.settings.protected, allowed=allowed)
             if tampered or forbidden:
                 _revert(worktree, checkpoint)
                 self.log(number, result, reverted=True, changed=code)
