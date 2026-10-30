@@ -28,10 +28,12 @@ EXPECTED = {
     (S.IN_PROGRESS, S.NEEDS_HUMAN): BOT,
     (S.IN_PROGRESS, S.FAILED): BOT,
     (S.IN_PROGRESS, S.BLOCKED): BOT,
+    (S.IN_PROGRESS, S.BACKLOG): PERSON,  # adlc reset
     (S.IN_REVIEW, S.DONE): BOT,
     (S.IN_REVIEW, S.IN_PROGRESS): BOT,
     (S.IN_REVIEW, S.NEEDS_HUMAN): BOT,
     (S.IN_REVIEW, S.FAILED): BOT,
+    (S.IN_REVIEW, S.BACKLOG): PERSON,  # adlc reset
     (S.NEEDS_HUMAN, S.IN_PROGRESS): PERSON,
     (S.NEEDS_HUMAN, S.BACKLOG): PERSON,
     (S.NEEDS_HUMAN, S.DRAFT): PERSON,
@@ -46,7 +48,7 @@ EXPECTED = {
 
 def test_the_table_is_exactly_the_agreed_one():
     assert TRANSITIONS == EXPECTED
-    assert len(EXPECTED) == 22
+    assert len(EXPECTED) == 24
 
 
 @pytest.mark.parametrize(("edge", "actor"), sorted(EXPECTED.items(), key=str))
