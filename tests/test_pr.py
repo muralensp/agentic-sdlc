@@ -325,11 +325,11 @@ def test_a_clean_task_is_pushed_opened_checked_merged_and_cleaned_up(sc):
     assert "run-1" in sc.notes()
 
 
-def test_the_pr_is_opened_against_the_base_with_the_commit_subject_as_title(sc):
+def test_the_pr_is_opened_against_the_base_with_a_title_from_the_task(sc):
     _, forge, _ = run(sc)
     create = next(c for c in forge.calls if c[0] == "create_pr")
     assert create[1] == "main"
-    assert create[3] == "feat(core): the thing (T-001)"
+    assert create[3] == "feat(t-001): Title of T-001"
     assert "Gate 1 (Architecture)" in create[4]
 
 
@@ -437,3 +437,54 @@ def test_approval_does_not_excuse_a_red_check(tmp_path):
 def test_nothing_is_deployed(sc):
     _, forge, _ = run(sc)
     assert not [n for n in forge.names() if "deploy" in n or "release" in n]
+
+
+# --- the title, the fence and the verification (ADLC-039) ---
+
+
+@pytest.mark.parametrize(
+    ("kind", "prefix"),
+    [
+        ("feature", "feat"),
+        ("bugfix", "fix"),
+        ("hotfix", "fix"),
+        ("test", "test"),
+        ("docs", "docs"),
+        ("refactor", "refactor"),
+        ("spike", "chore"),
+        ("unheard-of", "chore"),
+    ],
+)
+def test_the_title_prefix_follows_the_task_type(kind, prefix):
+    from adlc.pr import pr_title
+
+    assert pr_title(kind, "T-001", "Do the thing") == f"{prefix}(t-001): Do the thing"
+
+
+def test_a_reply_wrapped_in_a_markdown_fence_is_unwrapped(sc):
+    body, _ = body_for(sc, "```markdown\n" + GOOD_BODY + "```\n")
+    assert "```markdown" not in body and body.startswith("## Summary")
+
+
+def test_code_blocks_inside_a_wrapped_reply_are_kept(sc):
+    inner = "## Summary\nDid it.\n```text\nA -> B\n```\n## Impacted modules\nsrc\n"
+    inner += "## Tests\nnew\n## Risks\nnone\n"
+    body, _ = body_for(sc, "```markdown\n" + inner + "```")
+    assert "```text\nA -> B\n```" in body and not body.startswith("```")
+
+
+def test_a_reply_that_is_only_a_code_block_is_left_alone(sc):
+    body, _ = body_for(sc, "```text\nraw\n```\n" + GOOD_BODY)
+    assert body.startswith("```text")
+
+
+def test_the_body_carries_the_measured_verification(sc):
+    shown = "- build: exit 0 (1.2 s)\n- test: exit 0 (3.4 s)"
+    body, runner = body_for(sc, verification=shown)
+    assert "## Verification" in body and "- test: exit 0 (3.4 s)" in body
+    assert "Verification" in runner.requests[0].prompt
+
+
+def test_a_body_without_verification_says_so(sc):
+    body, _ = body_for(sc)
+    assert "## Verification" in body and "no" in body.split("## Verification")[1].lower()

@@ -30,6 +30,41 @@ def new_run(repo: Path, key: str) -> tuple[int, Path]:
 CALLS = "calls"
 
 
+def scrubbed_bytes(path: Path, scrub: Callable[[str], str]) -> bytes:
+    """A file's content, scrubbed. JSON is scrubbed value by value, so it stays valid JSON."""
+    raw = Path(path).read_bytes().decode("utf-8", errors="replace")
+    text = scrub(raw)
+    if Path(path).suffix == ".json":
+        try:
+            text = json.dumps(scrubbed(json.loads(raw), scrub), indent=2) + "\n"
+        except ValueError:
+            pass  # not JSON after all: the scrubbed text is the best we have
+    return text.encode("utf-8")
+
+
+def verification_text(run_dir: Path) -> str:
+    """The DoD results of the newest verification in a run, one line per command.
+
+    The exit codes and times are the orchestrator's measurements, read from `dod.json`.
+    """
+    folders = [p for p in Path(run_dir).glob("verify-*") if p.name[7:].isdigit()]
+    for folder in sorted(folders, key=lambda p: int(p.name[7:]), reverse=True):
+        try:
+            commands = json.loads((folder / "dod.json").read_bytes().decode("utf-8"))["commands"]
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+        lines = []
+        for c in commands:
+            name, code = c.get("name"), c.get("exit_code")
+            if code is None:
+                lines.append(f"- {name}: {c.get('status', 'not run')}")
+            else:
+                lines.append(f"- {name}: exit {code} ({float(c.get('duration', 0)):.1f} s)")
+        if lines:
+            return "\n".join(lines)
+    return ""
+
+
 def scrubbed(value: Any, scrub: Callable[[str], str]) -> Any:
     """`value` with every text in it scrubbed; numbers and structure are left alone.
 

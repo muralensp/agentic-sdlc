@@ -23,7 +23,7 @@ from adlc.config import Settings
 from adlc.dod import DEFAULT_TIMEOUT_SECONDS
 from adlc.gitwork import _git, commit
 from adlc.guardrails import command_violations
-from adlc.runlog import render_summary
+from adlc.runlog import render_summary, scrubbed_bytes
 from adlc.runner import AgentRequest, AgentResult, AgentRunner, Role, describe_denials
 from adlc.scope import out_of_scope
 from adlc.tdd import Lock, changed_paths, check_locked, proposed_test_change
@@ -255,8 +255,7 @@ class _Loop:
         )
         for path in sorted(out_dir.glob("*")) if out_dir.is_dir() else ():
             if path.is_file():  # what the commands printed may hold a secret
-                clean = self.scrub(path.read_bytes().decode("utf-8", errors="replace"))
-                write_atomic(path, clean.encode("utf-8"))
+                write_atomic(path, scrubbed_bytes(path, self.scrub))
         outputs = {}
         for result, verdict in zip(done.results, done.verdicts, strict=True):
             if verdict.verdict == "new":

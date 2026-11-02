@@ -10,9 +10,16 @@ from adlc.pr import Check, PullRequest
 
 
 class FakeForge:
-    def __init__(self, checks: Sequence[Sequence[Check]] = ((),), *, number: int = 7):
+    def __init__(
+        self,
+        checks: Sequence[Sequence[Check]] = ((),),
+        *,
+        number: int = 7,
+        pr_state: str = "OPEN",
+    ):
         self._checks = [list(c) for c in checks]
         self._number = number
+        self.pr_state = pr_state
         self.calls: list[tuple] = []
 
     def names(self) -> list[str]:
@@ -30,6 +37,10 @@ class FakeForge:
     def checks(self, pr: PullRequest) -> list[Check]:
         self.calls.append(("checks", pr.number))
         return self._checks.pop(0) if len(self._checks) > 1 else list(self._checks[0])
+
+    def state(self, pr: PullRequest) -> str:
+        self.calls.append(("state", pr.number))
+        return self.pr_state
 
     def mark_needs_human(self, pr: PullRequest) -> None:
         self.calls.append(("mark_needs_human", pr.number))

@@ -10,6 +10,7 @@ The code host sits behind `Forge`: `GhCli` is the real one, `adlc.fake_forge` th
 """
 
 import json
+import re
 import subprocess
 import time
 from collections.abc import Callable, Sequence
@@ -25,12 +26,13 @@ from adlc.escalation import (
     Escalation,
     Facts,
     Trigger,
+    approve,
     evaluate,
     merge_allowed,
     raise_escalation,
     task_state,
 )
-from adlc.gitwork import _git, remove_worktree
+from adlc.gitwork import _git, list_worktrees, remove_worktree
 from adlc.review import NO_EDITS, READ_ONLY, ReviewReport, signoff
 from adlc.runner import AgentRequest, AgentRunner, Role
 from adlc.stages import MethodRefused, resolve
@@ -73,6 +75,8 @@ class Forge(Protocol):
     ) -> PullRequest: ...
 
     def checks(self, pr: PullRequest) -> list[Check]: ...
+
+    def state(self, pr: PullRequest) -> str: ...  # OPEN, MERGED or CLOSED, as the host says
 
     def mark_needs_human(self, pr: PullRequest) -> None: ...
 
@@ -131,6 +135,10 @@ class GhCli:
         except ValueError as exc:
             raise CommandError(f"could not read the checks of PR {pr.number}: {exc}") from exc
         return [Check(r["name"], _BUCKET.get(r.get("bucket", ""), PENDING)) for r in rows]
+
+    def state(self, pr: PullRequest) -> str:
+        out = self._must(["gh", "pr", "view", str(pr.number), "--json", "state", "--jq", ".state"])
+        return out.strip().upper()
 
     def mark_needs_human(self, pr: PullRequest) -> None:
         """Best effort: the escalation record, not the label, is what stops the merge."""
@@ -194,6 +202,26 @@ def read_template(repo: Path) -> str | None:
     return None
 
 
+_TITLE_TYPE = {"feature": "feat", "bugfix": "fix", "hotfix": "fix"}
+_PLAIN_TYPES = ("test", "docs", "refactor", "style", "perf", "build", "ci", "chore", "revert")
+_WRAPPED = re.compile(r"\A```(?:markdown|md)[ \t]*\r?\n")
+
+
+def pr_title(task_type: str, key: str, title: str) -> str:
+    """`<commit type>(<key>): <task title>`: the PR title becomes the squash commit on the base."""
+    prefix = _TITLE_TYPE.get(task_type) or (task_type if task_type in _PLAIN_TYPES else "chore")
+    return f"{prefix}({key.lower()}): {' '.join(title.split())}"
+
+
+def unfence(text: str) -> str:
+    """The text without a `markdown` fence that wraps all of it; code blocks inside are kept."""
+    body = text.strip()
+    lines = body.split("\n")
+    if _WRAPPED.match(body) and len(lines) > 2 and lines[-1].strip() == "```":
+        return "\n".join(lines[1:-1]).strip()
+    return text
+
+
 def _task(repo: Path, key: str):
     board_path, briefs, rel = locations(repo)
     brief = parse_brief((briefs / f"{key}.md").read_text(encoding="utf-8"), key)
@@ -228,8 +256,9 @@ def _writer_prompt(key, title, criteria, facts, template) -> str:
         "Acceptance criteria:\n"
         + "\n".join(f"- {c}" for c in criteria)
         + f"\n\n{facts}\n\n{wanted}\n\n"
-        "Do not write the gate checklist or the log links: the tool adds them. State only what "
-        "you can see in the repository and the facts above; say what you did not verify."
+        "Do not write the gate checklist, the log links or the Verification section: the tool adds "
+        "them, with the exit codes it measured. State only what you can see in the repository and "
+        "the facts above; do not say whether the tests were run."
     )
 
 
@@ -246,6 +275,7 @@ def build_body(
     template: str | None = None,
     skills_root: Path | None = None,
     today: date | None = None,
+    verification: str = "",
 ) -> str:
     """The PR description: the writer's text, then the parts the tool adds itself."""
     brief, title, brief_path = _task(repo, key)
@@ -264,7 +294,7 @@ def build_body(
             disallowed_tools=NO_EDITS,
         )
     )
-    text = result.text.strip() if result.status == "ok" else ""
+    text = unfence(result.text).strip() if result.status == "ok" else ""
     if not text:
         text = (
             f"## Summary\n(The PR writer did not produce a description: {result.detail}.)\n{facts}"
@@ -288,7 +318,14 @@ def build_body(
     else:
         logs.append("- (no run log)")
     gates = ["## Gate checklist", *(lines or ["- (no gate results)"])]
-    return "\n\n".join([text, "\n".join(requirement), "\n".join(gates), "\n".join(logs)]) + "\n"
+    measured = [
+        "## Verification",
+        "Measured by the orchestrator, not reported by an agent:",
+        verification or "- no verification record was found for this run",
+    ]
+    joined = "\n".join
+    parts = [text, joined(measured), joined(requirement), joined(gates), joined(logs)]
+    return "\n\n".join(parts) + "\n"
 
 
 # --- deliver ------------------------------------------------------------------------------------
@@ -346,6 +383,7 @@ def deliver(
     poll_seconds: float = 30.0,
     max_wait: float = 1800.0,
     notify: Callable[[str, list[Escalation]], None] | None = None,
+    verification: str = "",
 ) -> Delivery:
     """Open the PR for a finished task and merge it when every condition holds.
 
@@ -383,9 +421,11 @@ def deliver(
             run_log=run_log,
             template=read_template(repo),
             skills_root=skills_root,
+            verification=verification,
         )
         branch = _git(worktree, "branch", "--show-current").stdout.strip()
-        title = _git(worktree, "log", "-1", "--format=%s").stdout.strip()
+        brief, task_title, _ = _task(repo, key)
+        title = pr_title(brief.type, key, task_title)
         forge.push(worktree, branch)
         pr = forge.create_pr(
             worktree, base=settings.git.base_branch, branch=branch, title=title, body=body
@@ -473,3 +513,38 @@ def deliver(
         record_hand_merge(repo, key, pr.number, pr.url)  # counts towards `adlc trust`
     (Path(repo) / STORE / f"{key}.json").unlink(missing_ok=True)
     return Delivery("merged", pr)
+
+
+def finish(repo: Path, key: str, *, forge: Forge) -> PullRequest:
+    """Close a task whose PR was merged on the host by a person (`adlc finish`).
+
+    The task becomes DONE with its Notes kept, the worktree and remote branch go, any open
+    escalation is closed as approved, and a merge a person was asked about counts towards
+    `adlc trust`, as it does when the PR step merges an approved task. Nothing changes unless the
+    host says the PR is merged.
+    """
+    repo = Path(repo)
+    state = task_state(repo, key)
+    pr = _saved(repo, key)
+    if pr is None:
+        raise CommandError(f"{key} has no pull request on record; there is nothing to finish")
+    host = forge.state(pr)
+    if host == "OPEN":
+        raise CommandError(f"PR #{pr.number} is still open; merge it, then run `adlc finish {key}`")
+    if host != "MERGED":
+        raise CommandError(
+            f"PR #{pr.number} was closed without merging; use `adlc reject {key}` or "
+            f"`adlc reset {key}`"
+        )
+    asked = state is State.NEEDS_HUMAN
+    if asked and not merge_allowed(repo, key):
+        approve(repo, key)  # the person merged it as it was: that is the approval
+    forge.delete_remote_branch(repo, pr.branch)
+    entry = next((w for w in list_worktrees(repo) if w.path.name == key and not w.is_primary), None)
+    remove_worktree(repo, key, force=True, root=entry.path.parent if entry else None)
+    done = f"Merged PR #{pr.number} by a person: {pr.url}."
+    _note(repo, key, State.DONE, done, Actor.HUMAN if asked else Actor.ORCHESTRATOR)
+    if asked:
+        record_hand_merge(repo, key, pr.number, pr.url)
+    (repo / STORE / f"{key}.json").unlink(missing_ok=True)
+    return pr

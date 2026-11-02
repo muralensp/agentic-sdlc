@@ -35,7 +35,7 @@ from adlc.methods import (
     supply_chain_warnings,
 )
 from adlc.plan import plan_run, render_plan
-from adlc.pr import GhCli
+from adlc.pr import GhCli, finish
 from adlc.recovery import handoff, reset, resume
 from adlc.run import next_ready_key, render_result, run_task
 from adlc.runlog import loop_status
@@ -147,8 +147,11 @@ def build_parser() -> argparse.ArgumentParser:
     reset_cmd.add_argument(
         "--yes", action="store_true", help="really delete (nothing is lost without it)"
     )
+    finish_cmd = commands.add_parser(
+        "finish", help="close a task whose pull request a person merged"
+    )
     handoff_cmd = commands.add_parser("handoff", help="write a short resume note for a task")
-    for command in (resume_cmd, reset_cmd, handoff_cmd):
+    for command in (resume_cmd, reset_cmd, handoff_cmd, finish_cmd):
         command.add_argument("key")
     for command in (
         add,
@@ -164,6 +167,7 @@ def build_parser() -> argparse.ArgumentParser:
         report_cmd,
         resume_cmd,
         reset_cmd,
+        finish_cmd,
         handoff_cmd,
         init_cmd,
         trust_cmd,
@@ -358,6 +362,12 @@ def _reset(args: argparse.Namespace, repo: Path) -> int:
     return 0
 
 
+def _finish(args: argparse.Namespace, repo: Path) -> int:
+    pr = finish(repo, args.key, forge=GhCli(cwd=repo))
+    print(f"{args.key} is DONE: PR #{pr.number} was merged ({pr.url})")
+    return 0
+
+
 def _init(args: argparse.Namespace, repo: Path) -> int:
     protection = gh_protection(repo)
     if not args.yes:
@@ -412,6 +422,7 @@ _BOARD_COMMANDS = {
     "report": _report,
     "resume": _resume,
     "reset": _reset,
+    "finish": _finish,
     "handoff": _handoff,
     "init": _init,
     "trust": _trust,
