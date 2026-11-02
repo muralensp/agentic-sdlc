@@ -249,6 +249,48 @@ def test_network_tools_are_denied_on_every_call(repo, tmp_path):
     assert "Write" in second.disallowed_tools and "WebSearch" in second.disallowed_tools
 
 
+@pytest.mark.parametrize("role", [Role.TESTER, Role.CODER])
+def test_the_tester_and_the_coder_may_edit_files_and_run_the_dod_commands(repo, tmp_path, role):
+    settings = load_config(repo)
+    inner = FakeRunner([ok()])
+    GuardedRunner(inner, settings).run(request(tmp_path, role=role))
+    (seen,) = inner.requests
+    assert seen.permission_mode == "acceptEdits"
+    for command in settings.dod.values():
+        assert f"Bash({command}:*)" in seen.allowed_tools
+    for rule in ("git status", "git diff", "git log", "git show", "git add", "git commit"):
+        assert f"Bash({rule}:*)" in seen.allowed_tools
+    assert "Bash" not in seen.allowed_tools  # never the whole shell
+    assert not any(t.startswith(("Bash(git push", "Bash(curl")) for t in seen.allowed_tools)
+    assert "WebFetch" in seen.disallowed_tools and "Bash(curl:*)" in seen.disallowed_tools
+
+
+@pytest.mark.parametrize("role", [Role.REVIEWER, Role.PR_WRITER])
+def test_the_reviewer_and_the_pr_writer_get_no_extra_permissions(repo, tmp_path, role):
+    inner = FakeRunner([ok()])
+    GuardedRunner(inner, load_config(repo)).run(request(tmp_path, role=role))
+    (seen,) = inner.requests
+    assert seen.permission_mode is None and seen.allowed_tools == ()
+
+
+def test_permissions_a_caller_already_chose_are_kept(repo, tmp_path):
+    inner = FakeRunner([ok(), ok()])
+    guarded = GuardedRunner(inner, load_config(repo))
+    guarded.run(request(tmp_path, permission_mode="plan"))
+    guarded.run(request(tmp_path, allowed_tools=("Read",)))
+    plan, listed = inner.requests
+    assert plan.permission_mode == "plan" and plan.allowed_tools == ()
+    assert listed.permission_mode is None and listed.allowed_tools == ("Read",)
+
+
+def test_bypass_permissions_is_never_used(repo, tmp_path):
+    inner = FakeRunner([ok(), ok()])
+    guarded = GuardedRunner(inner, load_config(repo))
+    for role in (Role.TESTER, Role.CODER):
+        guarded.run(request(tmp_path, role=role))
+    assert all(r.permission_mode != "bypassPermissions" for r in inner.requests)
+
+
 def test_the_raw_log_and_the_reply_are_scrubbed_after_the_run(repo, tmp_path):
     log = tmp_path / "logs" / "agent-1.jsonl"
 
