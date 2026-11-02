@@ -157,6 +157,21 @@ def with_cell(text: str, key: str, column: str, value: str, expected: str | None
     return "\n".join(lines)
 
 
+def join_note(existing: str, new: str) -> str:
+    """`new` added after the Notes text already in the cell, on one line.
+
+    The existing text is kept as it is written (escaped pipes included). Adding the same text twice
+    in a row adds nothing, so a retried step does not repeat itself.
+    """
+    new = _BARE_PIPE.sub(lambda _m: "\\|", " ".join(new.split()))
+    old = existing.strip()
+    if not old:
+        return new
+    if not new or old.endswith(new):
+        return old
+    return f"{old} {new}"
+
+
 def _column(header: tuple[str, ...], name: str) -> int:
     """Index of the column called `name`: an exact match, else a header starting with it."""
     lowered = [h.lower() for h in header]
@@ -246,6 +261,17 @@ class Board:
             new = with_cell(text, key, column, value, expected)
             if new != text:
                 self._write(new)
+
+    def append_note(self, key: str, text: str, drop: re.Pattern[str] | None = None) -> None:
+        """Add `text` after the row's Notes text; nothing a person wrote there is lost.
+
+        `drop` removes a marker the tool wrote earlier (a pause that is over), and nothing else.
+        """
+        with self._exclusive():
+            row = parse(self._read()).row(key)
+            old = next(v for h, v in row.cells.items() if h.lower() == "notes")
+            kept = " ".join(drop.sub("", old).split()) if drop else old
+            self.set_cell(key, "Notes", join_note(kept, text), expected=old)
 
     def add_row(self, values: dict[str, str]) -> None:
         with self._exclusive():

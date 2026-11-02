@@ -7,11 +7,12 @@ runner's usage figures, never from what an agent says; this module only reads an
 """
 
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
 from adlc.commands import CommandError, latest_run
+from adlc.runner import AgentRequest, AgentResult, AgentRunner
 
 RECORD = "loop.json"
 SUMMARY = "summary.md"
@@ -24,6 +25,60 @@ def new_run(repo: Path, key: str) -> tuple[int, Path]:
     folder = Path(repo) / ".adlc" / "logs" / key / f"run-{number}"
     folder.mkdir(parents=True)
     return number, folder
+
+
+CALLS = "calls"
+
+
+class LoggingRunner:
+    """Wraps any runner: every call leaves its prompt, reply, status and denials in the run folder.
+
+    `calls/<nn>-<role>/` holds `prompt.md`, `response.md` and `result.json`, numbered across the
+    whole run. The prompt is written before the call, so a call that never returns still shows what
+    it was asked. It logs the calls that stop a task as faithfully as the ones that succeed.
+    """
+
+    def __init__(
+        self,
+        inner: AgentRunner,
+        run_dir: Path,
+        scrub: Callable[[str], str] = lambda text: text,
+    ):
+        self.inner = inner
+        self.run_dir = Path(run_dir)
+        self.scrub = scrub
+        self.count = 0
+
+    def _put(self, folder: Path, name: str, text: str) -> None:
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / name).write_bytes(self.scrub(text).encode("utf-8"))
+
+    def run(self, request: AgentRequest) -> AgentResult:
+        self.count += 1
+        folder = self.run_dir / CALLS / f"{self.count:02d}-{request.role.value}"
+        self._put(folder, "prompt.md", request.prompt)
+        try:
+            result = self.inner.run(request)
+        except BaseException as exc:
+            failure = {
+                "role": request.role.value,
+                "status": "exception",
+                "detail": f"{type(exc).__name__}: {exc}",
+            }
+            self._put(folder, "result.json", json.dumps(failure) + "\n")
+            raise
+        self._put(folder, "response.md", f"{result.text or result.detail}\n")
+        saved = {
+            "role": request.role.value,
+            "status": result.status,
+            "detail": result.detail,
+            "permission_denials": list(result.permission_denials),
+            "exit_code": result.exit_code,
+            "duration": result.duration,
+            "turns": result.turns,
+        }
+        self._put(folder, "result.json", json.dumps(saved, indent=2, default=str) + "\n")
+        return result
 
 
 def load_record(folder: Path) -> dict[str, Any]:
@@ -117,6 +172,10 @@ def render_summary(record: Mapping[str, Any]) -> str:
             f"| {i.get('input_tokens', 0)}/{i.get('output_tokens', 0)} "
             f"| {'yes' if i.get('reverted') else 'no'} | {files} | {failing} |"
         )
+    denied = [(i.get("number"), d) for i in iterations for d in i.get("denials") or ()]
+    if denied:
+        lines += ["", "## Denied tool calls", ""]
+        lines += [f"- iteration {number}: {what}" for number, what in denied]
     if record.get("diagnosis"):
         lines += ["", "## Diagnosis", "", str(record["diagnosis"])]
     if record.get("findings"):

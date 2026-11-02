@@ -24,7 +24,7 @@ from adlc.dod import DEFAULT_TIMEOUT_SECONDS
 from adlc.gitwork import _git, commit
 from adlc.guardrails import command_violations
 from adlc.runlog import render_summary
-from adlc.runner import AgentRequest, AgentResult, AgentRunner, Role
+from adlc.runner import AgentRequest, AgentResult, AgentRunner, Role, describe_denials
 from adlc.scope import out_of_scope
 from adlc.tdd import Lock, changed_paths, check_locked, proposed_test_change
 from adlc.tdd import _write as write_atomic
@@ -71,6 +71,9 @@ class Stop(StrEnum):
     PAUSED = "paused"  # a usage window ran out: not a failure, nothing to escalate
 
 
+_NO_PROGRESS = (Stop.STUCK, Stop.MAX_ITERATIONS, Stop.MAX_MINUTES)  # a refusal may be why
+
+
 @dataclass(frozen=True)
 class Review:
     decision: str  # approve, changes_requested or escalate
@@ -98,6 +101,7 @@ class IterationRecord:
     cache_read_tokens: int = 0
     cache_creation_tokens: int = 0
     cost_usd: float = 0.0  # list price: an estimate, not a bill, on a subscription
+    denials: tuple[str, ...] = ()  # tool calls Claude Code refused during this iteration
 
 
 @dataclass(frozen=True)
@@ -213,6 +217,10 @@ class _Loop:
         self.put("summary.md", render_summary(document))
 
     def finish(self, stop: Stop, detail: str = "", resets_at: datetime | None = None):
+        if stop in _NO_PROGRESS:
+            denied = tuple(dict.fromkeys(d for i in self.iterations for d in i.denials))
+            if denied:
+                detail = f"{detail}; Claude Code denied: {'; '.join(denied)}"
         self.save(stop, detail, resets_at)
         return LoopOutcome(
             stop,
@@ -340,6 +348,7 @@ class _Loop:
                 result.usage.cache_read_tokens,
                 result.usage.cache_creation_tokens,
                 result.usage.cost_usd_list,
+                tuple(dict.fromkeys(describe_denials([d]) for d in result.permission_denials)),
             )
         )
         self.save()
