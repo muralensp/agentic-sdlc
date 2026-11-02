@@ -136,7 +136,7 @@ def sc(tmp_path):
     return make_scenario(tmp_path)
 
 
-def edit(*files, text="made a change", progress=None, advance=0.0, clock=None):
+def edit(*files, text="made a change", progress=None, advance=0.0, clock=None, **result):
     """A Coder iteration that writes files (and, optionally, progress.md)."""
 
     def step(request):
@@ -146,7 +146,7 @@ def edit(*files, text="made a change", progress=None, advance=0.0, clock=None):
             write(request.cwd, "progress.md", progress)
         if clock is not None:
             clock.t += advance
-        return ok(text)
+        return ok(text, **result)
 
     return step
 
@@ -527,3 +527,33 @@ def test_the_reviewer_is_not_asked_again_about_code_that_did_not_change(sc):
     outcome, runner = sc.run(script, review=review, diagnose_method="m")
     assert outcome.stop is Stop.SUCCESS and len(runner.requests) == 4
     assert len(asked) == 2  # once before the stuck iteration, once after the real change
+
+
+# --- denied tool calls (ADLC-036) ---------------------------------------------------------------
+
+DENIED = ({"tool_name": "Bash", "tool_input": {"command": "dotnet test"}},)
+
+
+def test_a_denied_tool_call_is_recorded_in_that_iterations_log_entry(sc):
+    outcome, _ = sc.run([edit(FIX_A, FIX_B, permission_denials=DENIED)])
+    assert outcome.iterations[0].denials == ("Bash dotnet test",)
+    saved = json.loads((sc.run_dir / "loop.json").read_text())
+    assert saved["iterations"][0]["denials"] == ["Bash dotnet test"]
+
+
+def test_an_iteration_without_denials_records_none(sc):
+    outcome, _ = sc.run([edit(FIX_A, FIX_B)])
+    assert outcome.iterations[0].denials == ()
+
+
+def test_a_loop_that_stops_without_progress_names_what_was_denied(sc):
+    outcome, _ = sc.run([edit(progress="could not run the tests", permission_denials=DENIED)])
+    assert outcome.stop is Stop.STUCK
+    assert "no change" in outcome.detail
+    assert "denied" in outcome.detail and "Bash dotnet test" in outcome.detail
+    assert "Bash dotnet test" in json.loads((sc.run_dir / "loop.json").read_text())["detail"]
+
+
+def test_a_stop_with_no_denials_does_not_mention_them(sc):
+    outcome, _ = sc.run([edit(progress="thinking")])
+    assert "denied" not in outcome.detail

@@ -82,9 +82,14 @@ def row_state(repo: Path, key: str) -> State:
 
 
 def update_row(
-    repo: Path, key: str, status: State | None, notes: str, actor: Actor = Actor.ORCHESTRATOR
+    repo: Path,
+    key: str,
+    status: State | None,
+    notes: str,
+    actor: Actor = Actor.ORCHESTRATOR,
+    drop: re.Pattern[str] | None = None,
 ) -> None:
-    """Set a row's Status (if given, and legal for `actor`) and Notes under the board lock."""
+    """Set a row's Status (if given, and legal for `actor`) and add to its Notes, under the lock."""
     board_path, _, _ = locations(repo)
     board = Board(board_path)
     current = row_state(repo, key)
@@ -94,7 +99,7 @@ def update_row(
     with board.lock():
         if change:
             board.set_cell(key, "Status", status.value)
-        board.set_cell(key, "Notes", " ".join(notes.split()))
+        board.append_note(key, notes, drop)
 
 
 # --- add --------------------------------------------------------------------------------------

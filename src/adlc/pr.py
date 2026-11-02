@@ -325,7 +325,7 @@ def _note(repo: Path, key: str, state: State | None, notes: str, actor=Actor.ORC
     with board.lock():
         if state is not None and state is not current:
             board.set_cell(key, "Status", state.value)
-        board.set_cell(key, "Notes", " ".join(notes.split()))
+        board.append_note(key, notes)
 
 
 def deliver(

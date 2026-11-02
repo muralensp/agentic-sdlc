@@ -276,7 +276,7 @@ def _set(board: Board, key: str, status: State | None, notes: str) -> None:
     with board.lock():
         if status is not None:
             board.set_cell(key, "Status", status.value)
-        board.set_cell(key, "Notes", notes)
+        board.append_note(key, notes)
 
 
 def raise_escalation(

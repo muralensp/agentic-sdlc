@@ -37,7 +37,7 @@ from adlc.plan import base_prompt, plan_run
 from adlc.pr import Delivery, Forge, deliver
 from adlc.recovery import can_start, pause_hook, pause_task, record_start
 from adlc.review import ReviewReport, make_reviewer
-from adlc.runlog import new_run
+from adlc.runlog import LoggingRunner, new_run
 from adlc.runner import AgentRequest, AgentRunner, Role, describe_denials
 from adlc.scope import out_of_scope
 from adlc.stages import MethodRefused, resolve, tester_stage
@@ -248,10 +248,12 @@ def run_task(
         raise
     record_start(repo, key, now)
     _, run_dir = new_run(repo, key)
+    scrub = make_scrubber(settings)
+    logged = LoggingRunner(guarded, run_dir, scrub)  # every agent call is kept in the run folder
     base = _git(made.path, "rev-parse", "HEAD")
 
     lock, stopped = _tester_phase(
-        repo, settings, task, made, base, guarded, resolutions, run_dir, bash, dod_timeout
+        repo, settings, task, made, base, logged, resolutions, run_dir, bash, dod_timeout
     )
     if stopped == "paused":
         return RunResult("paused", key, "a usage limit paused the Tester", run_dir=run_dir)
@@ -265,9 +267,9 @@ def run_task(
         worktree=made.path,
         base=base,
         settings=settings,
-        runner=guarded,
+        runner=logged,
         review=make_reviewer(
-            guarded,
+            logged,
             brief=shared,
             method=resolutions["review"].text,
             on_report=reports.append,
@@ -280,7 +282,7 @@ def run_task(
         diagnose_method=resolutions["diagnose"].text or None,
         key=key,
         methods={s: resolutions[s].record() for s in _LOOP_STAGES},
-        scrub=make_scrubber(settings),
+        scrub=scrub,
         max_iterations=max_iterations,
         bash=bash,
         dod_timeout=dod_timeout,
@@ -297,7 +299,7 @@ def run_task(
         repo,
         key,
         made.path,
-        runner=guarded,
+        runner=logged,
         forge=forge,
         report=reports[-1],
         dod_green=True,

@@ -14,7 +14,7 @@ from adlc.commands import CommandError
 from adlc.dod import find_bash
 from adlc.escalation import Trigger, list_open
 from adlc.fake_forge import FakeForge
-from adlc.fake_runner import FakeRunner, ok, rate_limited
+from adlc.fake_runner import FakeRunner, error, ok, rate_limited
 from adlc.guardrails import UNTRUSTED_NOTICE
 from adlc.pr import Check
 from adlc.recovery import current_pause
@@ -437,3 +437,62 @@ def test_a_usage_limit_during_the_tester_pauses_the_task(tmp_path):
     assert current_pause(scene.repo, "T-001") is not None
     assert list_open(scene.repo) == [] and forge.calls == []
     assert [r.role for r in runner.requests] == [Role.TESTER]
+
+
+# --- the agents' replies are kept in the run folder (ADLC-036) ---
+
+
+def calls(result):
+    """The per-call folders of a run, in order: {folder name: result.json}."""
+    root = result.run_dir / "calls"
+    return {p.name: json.loads((p / "result.json").read_text()) for p in sorted(root.iterdir())}
+
+
+def test_every_agent_call_leaves_its_prompt_reply_status_and_denials(tmp_path):
+    scene = Scene(tmp_path)
+    result, _, _ = scene.go(*good_script())
+    saved = calls(result)
+    assert list(saved) == ["01-tester", "02-coder", "03-reviewer", "04-pr_writer"]
+    for name, record in saved.items():
+        assert record["status"] == "ok" and record["permission_denials"] == [], name
+        folder = result.run_dir / "calls" / name
+        assert UNTRUSTED_NOTICE not in (folder / "prompt.md").read_text()
+        assert (folder / "prompt.md").read_text().strip(), name
+        assert (folder / "response.md").read_text().strip(), name
+
+
+def test_a_call_that_escalates_the_task_is_still_logged_with_its_denials(tmp_path):
+    scene = Scene(tmp_path)
+    denied = ({"tool_name": "Write", "tool_input": {"file_path": "tests/check.sh"}},)
+    result, _, _ = scene.go(ok("I could not write the file", permission_denials=denied))
+    assert result.status == "escalated"
+    (record,) = calls(result).values()
+    assert record["role"] == "tester" and record["status"] == "ok"
+    assert record["permission_denials"] == [
+        {"tool_name": "Write", "tool_input": {"file_path": "tests/check.sh"}}
+    ]
+    reply = (result.run_dir / "calls" / "01-tester" / "response.md").read_text()
+    assert "I could not write the file" in reply
+
+
+def test_a_call_that_failed_is_logged_with_its_reason(tmp_path):
+    scene = Scene(tmp_path)
+    result, _, _ = scene.go(error("the model fell over"))
+    (record,) = calls(result).values()
+    assert record["status"] == "error" and "fell over" in record["detail"]
+
+
+def test_the_logged_prompt_and_reply_are_scrubbed(tmp_path):
+    scene = Scene(tmp_path)
+    secret = "4111111111111111"  # a card number: scrubbed by default
+    result, _, _ = scene.go(ok(f"the card is {secret}"))
+    folder = result.run_dir / "calls" / "01-tester"
+    assert secret not in (folder / "response.md").read_text()
+    assert secret not in (folder / "result.json").read_text()
+
+
+def test_calls_are_numbered_across_the_whole_run_including_the_loop(tmp_path):
+    scene = Scene(tmp_path)
+    wrong = coder(("src/other.txt", "x"))
+    result, _, _ = scene.go(write_tests(), wrong, max_iterations=1)
+    assert list(calls(result)) == ["01-tester", "02-coder"]

@@ -9,6 +9,7 @@ the artifacts instead of copying them, with secrets removed.
 """
 
 import json
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -37,6 +38,9 @@ WINDOW = timedelta(hours=5)  # the Claude Code usage window; used when the provi
 LEDGER = Path(".adlc") / "window.json"
 HANDOFF = Path(".adlc") / "handoff"
 _MAX_FAILURE = 600  # characters of the last failure quoted in a handoff note
+
+
+PAUSE_MARK = re.compile(r"PAUSED until \S+(?: \[[^\]]*\])?")  # what `pause_task` writes in Notes
 
 
 def _now(now: datetime | None) -> datetime:
@@ -155,7 +159,7 @@ def pause_task(
         {"resets_at": resets.isoformat(), "since": now.isoformat(), "detail": detail},
     )
     note_limit_hit(repo, resets)
-    why = f": {detail}" if detail else ""
+    why = f" [{' '.join(detail.replace(']', ')').split())}]" if detail else ""
     update_row(repo, key, None, f"PAUSED until {resets.isoformat()}{why}")
     return pause
 
@@ -253,7 +257,7 @@ def resume(repo: Path, key: str, *, now: datetime | None = None, force: bool = F
     progress = entry.path / "progress.md"
     _pause_path(repo, key).unlink(missing_ok=True)
     note = "Resumed after a usage-window pause." if pause else "Resumed."
-    update_row(repo, key, None, note)
+    update_row(repo, key, None, note, drop=PAUSE_MARK)
     record_start(repo, key, now)
     return Resume(
         key,
