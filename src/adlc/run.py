@@ -37,7 +37,7 @@ from adlc.plan import base_prompt, plan_run
 from adlc.pr import Delivery, Forge, deliver
 from adlc.recovery import can_start, pause_hook, pause_task, record_start
 from adlc.review import ReviewReport, make_reviewer
-from adlc.runlog import LoggingRunner, new_run
+from adlc.runlog import LoggingRunner, new_run, verification_text
 from adlc.runner import AgentRequest, AgentRunner, Role, describe_denials
 from adlc.scope import out_of_scope
 from adlc.stages import MethodRefused, resolve, tester_stage
@@ -312,6 +312,7 @@ def run_task(
         poll_seconds=poll_seconds,
         max_wait=max_wait,
         notify=notify,
+        verification=verification_text(run_dir),
     )
     detail = delivery.pr.url if delivery.pr else ""
     return RunResult(

@@ -318,3 +318,51 @@ def test_agent_text_in_the_summary_is_scrubbed(sc):
     )
     assert secret not in (sc.run_dir / "summary.md").read_text()
     assert secret not in (sc.run_dir / "loop.json").read_text()
+
+
+# --- DoD records stay valid; the verification text (ADLC-039) ---
+
+
+def test_the_dod_records_stay_valid_json_after_scrubbing(sc):
+    import re
+
+    def scrub(text):  # eats any run of three digits, as the card pattern can
+        return re.sub(r"\d{3,}", "[X]", text)
+
+    sc.run([edit(FIX_A), edit(FIX_B)], key="ADLC-016", scrub=scrub)
+    records = sorted(sc.run_dir.glob("verify-*/dod.json"))
+    assert records
+    for path in records:
+        data = json.loads(path.read_text())
+        assert all(isinstance(c["exit_code"], int) for c in data["commands"])
+
+
+def test_command_output_in_the_verify_folder_is_still_scrubbed(sc):
+    def scrub(text):
+        return text.replace("FAIL", "[HIDDEN]")
+
+    sc.run([edit(FIX_A), edit(FIX_B)], key="ADLC-016", scrub=scrub)
+    out = (sc.run_dir / "verify-0").glob("*.out")
+    assert "FAIL" not in "".join(p.read_text() for p in out)
+
+
+def test_the_verification_text_lists_each_command_with_its_exit_code(tmp_path):
+    from adlc.runlog import verification_text
+
+    folder = tmp_path / "verify-2"
+    folder.mkdir()
+    commands = [
+        {"name": "build", "exit_code": 0, "status": "pass", "duration": 1.234},
+        {"name": "test", "exit_code": 1, "status": "fail", "duration": 3.4},
+    ]
+    (folder / "dod.json").write_text(json.dumps({"commands": commands}))
+    (tmp_path / "verify-1").mkdir()
+    (tmp_path / "verify-1" / "dod.json").write_text(json.dumps({"commands": []}))
+    text = verification_text(tmp_path)
+    assert "build: exit 0 (1.2 s)" in text and "test: exit 1 (3.4 s)" in text
+
+
+def test_the_verification_text_is_empty_when_nothing_was_verified(tmp_path):
+    from adlc.runlog import verification_text
+
+    assert verification_text(tmp_path) == ""
