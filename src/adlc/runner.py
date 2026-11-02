@@ -56,6 +56,7 @@ class AgentRequest:
     allowed_tools: tuple[str, ...] = ()
     disallowed_tools: tuple[str, ...] = ()
     agent: str | None = None  # a Claude Code subagent definition (ADLC-033)
+    permission_mode: str | None = None  # Claude Code's --permission-mode; nobody can approve in -p
     log_path: Path | None = None  # where to save the raw stream
 
 
@@ -95,6 +96,19 @@ class AgentResult:
 
 class AgentRunner(Protocol):
     def run(self, request: AgentRequest) -> AgentResult: ...
+
+
+def describe_denials(denials: Sequence[Any]) -> str:
+    """Claude Code's denied tool calls as short text: the tool and its path or command."""
+    shown = []
+    for denial in denials:
+        if not isinstance(denial, Mapping):
+            shown.append(str(denial))
+            continue
+        given = denial.get("tool_input") or {}
+        target = given.get("file_path") or given.get("command") or given.get("path") or ""
+        shown.append(f"{denial.get('tool_name', '?')} {target}".strip())
+    return "; ".join(dict.fromkeys(shown))
 
 
 def same_model(a: str | None, b: str | None) -> bool:
@@ -225,6 +239,8 @@ class ClaudeCodeRunner:
             agent = AGENT_NAMES[request.role] if known.is_file() else None
         if agent:
             args += ["--agent", agent]
+        if request.permission_mode:
+            args += ["--permission-mode", request.permission_mode]
         if request.allowed_tools:
             args += ["--allowedTools", ",".join(request.allowed_tools)]
         if request.disallowed_tools:

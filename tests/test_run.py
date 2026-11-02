@@ -267,6 +267,18 @@ def test_a_tester_that_writes_no_tests_is_stopped(tmp_path):
     assert len(runner.requests) == 1
 
 
+def test_a_tester_that_was_denied_a_tool_says_so(tmp_path):
+    scene = Scene(tmp_path)
+    denied = ({"tool_name": "Write", "tool_input": {"file_path": "tests/check.sh"}},)
+    result, _, _ = scene.go(ok("I could not write the file", permission_denials=denied))
+    assert result.status == "escalated"
+    assert_escalated(scene, Trigger.TEST_INTEGRITY)
+    reason = result.escalations[0].reason
+    assert "wrote no tests" in reason and "denied" in reason
+    assert "Write" in reason and "tests/check.sh" in reason
+    assert "denied" in scene.notes()
+
+
 def test_tests_that_already_pass_are_not_accepted(tmp_path):
     scene = Scene(tmp_path)
     result, runner, _ = scene.go(write_tests(("tests/check.sh", PASSING_TEST)))

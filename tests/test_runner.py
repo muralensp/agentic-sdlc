@@ -194,8 +194,20 @@ def test_no_tool_flags_are_added_when_none_are_given(stub):
     stub.script(lines=[result_event()])
     stub.runner().run(stub.request())
     args = stub.record()["args"]
-    for flag in ("--agent", "--allowedTools", "--disallowedTools", "--max-budget-usd"):
+    for flag in (
+        "--agent",
+        "--allowedTools",
+        "--disallowedTools",
+        "--max-budget-usd",
+        "--permission-mode",
+    ):
         assert flag not in args
+
+
+def test_a_permission_mode_is_passed_to_claude_code(stub):
+    stub.script(lines=[result_event()])
+    stub.runner().run(stub.request(permission_mode="acceptEdits"))
+    assert arg_after(stub.record()["args"], "--permission-mode") == "acceptEdits"
 
 
 def test_a_cost_limit_becomes_a_budget_flag(stub):

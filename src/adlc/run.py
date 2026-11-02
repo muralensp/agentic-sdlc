@@ -38,7 +38,7 @@ from adlc.pr import Delivery, Forge, deliver
 from adlc.recovery import can_start, pause_hook, pause_task, record_start
 from adlc.review import ReviewReport, make_reviewer
 from adlc.runlog import new_run
-from adlc.runner import AgentRequest, AgentRunner, Role
+from adlc.runner import AgentRequest, AgentRunner, Role, describe_denials
 from adlc.scope import out_of_scope
 from adlc.stages import MethodRefused, resolve, tester_stage
 from adlc.states import State
@@ -157,7 +157,10 @@ def _tester_phase(repo, settings, task, made, base, guarded, resolutions, run_di
         return None, escalation_for(Trigger.SPEC_PROBLEM, problem.group(1).strip())
     changes = changed_paths(made.path, base)
     if not changes:
-        return None, escalation_for(Trigger.TEST_INTEGRITY, "the Tester wrote no tests")
+        reason = "the Tester wrote no tests"
+        if result.permission_denials:
+            reason += f"; Claude Code denied: {describe_denials(result.permission_denials)}"
+        return None, escalation_for(Trigger.TEST_INTEGRITY, reason)
     bad = out_of_scope_for_tester(changes, settings) + [p for p, s in changes.items() if s == "D"]
     if bad:
         reason = "the Tester changed files that are not new or edited tests"
