@@ -54,6 +54,16 @@ def test_dotnet_dod_is_the_boss_command_set_in_run_order(repo):
     assert list(dod) == list(DOTNET_DOD)
 
 
+def test_dotnet_lets_the_agents_run_the_dotnet_tools(repo):
+    allowed = set(use(repo, "dotnet").guardrails.agent_commands)
+    assert {"dotnet test", "dotnet build", "dotnet format"} <= allowed
+
+
+def test_the_other_profiles_add_no_agent_commands(repo):
+    assert use(repo, "generic").guardrails.agent_commands == ()
+    assert use(repo, "python").guardrails.agent_commands == ()
+
+
 def test_dotnet_protects_the_boss_areas_and_keeps_the_generic_ones(repo):
     protected = use(repo, "dotnet").protected
     for glob in (".github/**", ".adlc/**", "**/migrations/**"):  # from generic

@@ -265,6 +265,24 @@ def test_the_tester_and_the_coder_may_edit_files_and_run_the_dod_commands(repo, 
     assert "WebFetch" in seen.disallowed_tools and "Bash(curl:*)" in seen.disallowed_tools
 
 
+def test_commands_a_profile_names_for_the_agents_are_allowed_too(repo, tmp_path):
+    configure(repo, guardrails={"agent_commands": ["dotnet test", "dotnet format"]})
+    inner = FakeRunner([ok()])
+    GuardedRunner(inner, load_config(repo)).run(request(tmp_path, role=Role.CODER))
+    (seen,) = inner.requests
+    assert "Bash(dotnet test:*)" in seen.allowed_tools
+    assert "Bash(dotnet format:*)" in seen.allowed_tools
+
+
+def test_without_agent_commands_only_the_dod_and_git_are_allowed(repo, tmp_path):
+    settings = load_config(repo)
+    assert settings.guardrails.agent_commands == ()
+    inner = FakeRunner([ok()])
+    GuardedRunner(inner, settings).run(request(tmp_path, role=Role.CODER))
+    (seen,) = inner.requests
+    assert not any("dotnet" in rule for rule in seen.allowed_tools)
+
+
 @pytest.mark.parametrize("role", [Role.REVIEWER, Role.PR_WRITER])
 def test_the_reviewer_and_the_pr_writer_get_no_extra_permissions(repo, tmp_path, role):
     inner = FakeRunner([ok()])

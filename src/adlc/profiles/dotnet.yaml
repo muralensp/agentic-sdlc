@@ -41,3 +41,9 @@ tests:                                 # no per-file command: the `test` script 
 merge:
   required_checks: ["CI passed", "Analyze (csharp)"]
   method: squash
+
+guardrails:
+  agent_commands:                      # the DoD commands are wrapper scripts; the agents need the tools for quick checks
+    - dotnet build
+    - dotnet test
+    - dotnet format
