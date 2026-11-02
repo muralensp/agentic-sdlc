@@ -98,17 +98,34 @@ class AgentRunner(Protocol):
     def run(self, request: AgentRequest) -> AgentResult: ...
 
 
+_SHOWN_DENIALS = 3
+_SHOWN_CHARS = 80
+_FIRST_COMMAND = re.compile(r"&&|\|\||[;|&\n]")
+
+
+def _short(text: str) -> str:
+    """The first command of a shell line, on one line and cut to a readable length."""
+    first = " ".join(_FIRST_COMMAND.split(text, maxsplit=1)[0].split())
+    return first if len(first) <= _SHOWN_CHARS else first[: _SHOWN_CHARS - 3] + "..."
+
+
 def describe_denials(denials: Sequence[Any]) -> str:
-    """Claude Code's denied tool calls as short text: the tool and its path or command."""
+    """Claude Code's denied tool calls as short text: the tool and its path or first command.
+
+    At most three are named and the rest counted; the full calls stay in the run log.
+    """
     shown = []
     for denial in denials:
         if not isinstance(denial, Mapping):
-            shown.append(str(denial))
+            shown.append(_short(str(denial)))
             continue
         given = denial.get("tool_input") or {}
         target = given.get("file_path") or given.get("command") or given.get("path") or ""
-        shown.append(f"{denial.get('tool_name', '?')} {target}".strip())
-    return "; ".join(dict.fromkeys(shown))
+        shown.append(_short(f"{denial.get('tool_name', '?')} {target}".strip()))
+    unique = list(dict.fromkeys(shown))
+    more = len(unique) - _SHOWN_DENIALS
+    named = "; ".join(unique[:_SHOWN_DENIALS])
+    return f"{named}; (+{more} more)" if more > 0 else named
 
 
 def same_model(a: str | None, b: str | None) -> bool:

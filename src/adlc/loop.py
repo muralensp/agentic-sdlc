@@ -210,17 +210,27 @@ class _Loop:
             "usage": self.usage(),
             "methods": dict(self.methods or {}),
             "iterations": [
-                {**asdict(i), "signature": self.scrub(i.signature)} for i in self.iterations
+                {
+                    **asdict(i),
+                    "signature": self.scrub(i.signature),
+                    "changed": [self.scrub(p) for p in i.changed],
+                    "failing": [self.scrub(f) for f in i.failing],
+                    "denials": [self.scrub(d) for d in i.denials],
+                }
+                for i in self.iterations
             ],
         }
         write_atomic(self.record, (json.dumps(document, indent=2) + "\n").encode("utf-8"))
-        self.put("summary.md", render_summary(document))
+        # Every agent-written text in the document is scrubbed above. Scrubbing the rendered report
+        # again would redact its own labels ("Tokens: 18 in", "secret_scan: ...").
+        write_atomic(Path(self.run_dir) / "summary.md", render_summary(document).encode("utf-8"))
 
     def finish(self, stop: Stop, detail: str = "", resets_at: datetime | None = None):
         if stop in _NO_PROGRESS:
             denied = tuple(dict.fromkeys(d for i in self.iterations for d in i.denials))
             if denied:
                 detail = f"{detail}; Claude Code denied: {'; '.join(denied)}"
+        detail = self.scrub(detail)
         self.save(stop, detail, resets_at)
         return LoopOutcome(
             stop,

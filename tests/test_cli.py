@@ -36,3 +36,18 @@ def test_module_entry_point_reports_version():
     )
     assert result.returncode == 0
     assert __version__ in result.stdout
+
+
+def test_output_that_the_console_cannot_show_prints_a_question_mark(monkeypatch):
+    import io
+    import sys
+
+    from adlc.cli import tolerant_output
+
+    raw = io.BytesIO()
+    monkeypatch.setattr(sys, "stdout", io.TextIOWrapper(raw, encoding="cp1252"))
+    monkeypatch.setattr(sys, "stderr", io.TextIOWrapper(io.BytesIO(), encoding="cp1252"))
+    tolerant_output()
+    print("a → b")
+    sys.stdout.flush()
+    assert raw.getvalue().startswith(b"a ? b")

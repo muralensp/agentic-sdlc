@@ -213,15 +213,28 @@ def parse_report(text: str) -> ReviewReport:
     return ReviewReport(decision, standards, spec, gates)
 
 
-def _diff(worktree: Path, base: str) -> str:
-    """Everything changed since `base`, new files included (staged, as the loop does)."""
-    for args in (("add", "-A"), ("diff", "--cached", base)):
-        done = subprocess.run(
-            ["git", *args], cwd=worktree, capture_output=True, text=True, encoding="utf-8"
-        )
-        if done.returncode != 0:
-            raise RuntimeError(f"git {' '.join(args)} failed: {done.stderr.strip()}")
+LOOP_NOTES = "progress.md"  # the Coder's working note: not part of the change (ADLC-037)
+
+
+def _git_text(worktree: Path, *args: str) -> str:
+    done = subprocess.run(
+        ["git", *args], cwd=worktree, capture_output=True, text=True, encoding="utf-8"
+    )
+    if done.returncode != 0:
+        raise RuntimeError(f"git {' '.join(args)} failed: {done.stderr.strip()}")
     return done.stdout
+
+
+def _diff(worktree: Path, base: str, ignore: tuple[str, ...] = (LOOP_NOTES,)) -> str:
+    """Everything changed since `base`, new files included (staged, as the loop does).
+
+    The loop's own notes are left out, because the orchestrator removes them before the pull
+    request; a file of that name that `base` already has is part of the change and stays in.
+    """
+    skip = [p for p in ignore if not _git_text(worktree, "ls-tree", base, "--", p).strip()]
+    _git_text(worktree, "add", "-A")
+    left_out = [f":(exclude,literal){p}" for p in skip]
+    return _git_text(worktree, "diff", "--cached", base, "--", ".", *left_out)
 
 
 def make_reviewer(

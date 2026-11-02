@@ -216,3 +216,39 @@ def test_an_empty_diff_is_not_sent_to_the_model(worktree):
     assert verdict.decision == "escalate" and "no changes" in verdict.findings
     assert not runner.requests
     assert head != g(path, "rev-parse", "HEAD")
+
+
+# --- progress.md is the loop's working note, not part of the change (ADLC-038) ---
+
+
+def test_the_reviewer_does_not_see_the_loops_progress_notes(worktree):
+    path, base = worktree
+    (path / "progress.md").write_text("tried a thing\n")
+    runner = FakeRunner([ok(reply())], models=MODELS)
+    make_reviewer(runner, brief="B")(path, base)
+    (request,) = runner.requests
+    assert "progress.md" not in request.prompt and "tried a thing" not in request.prompt
+    assert "+two" in request.prompt  # the real change is still reviewed
+
+
+def test_a_progress_file_the_repository_already_had_is_still_reviewed(tmp_path):
+    g(tmp_path, "init", "-q", "-b", "main")
+    (tmp_path / "progress.md").write_text("old\n")
+    g(tmp_path, "add", "-A")
+    g(tmp_path, "commit", "-q", "-m", "init")
+    base = g(tmp_path, "rev-parse", "HEAD")
+    (tmp_path / "progress.md").write_text("new\n")
+    runner = FakeRunner([ok(reply())], models=MODELS)
+    make_reviewer(runner, brief="B")(tmp_path, base)
+    assert "+new" in runner.requests[0].prompt
+
+
+def test_only_the_progress_notes_changed_means_nothing_to_review(worktree):
+    path, _ = worktree
+    g(path, "add", "-A")
+    g(path, "commit", "-q", "-m", "all in")
+    base = g(path, "rev-parse", "HEAD")
+    (path / "progress.md").write_text("notes\n")
+    runner = FakeRunner([], models=MODELS)
+    verdict = make_reviewer(runner, brief="B")(path, base)
+    assert verdict.decision == "escalate" and runner.requests == []

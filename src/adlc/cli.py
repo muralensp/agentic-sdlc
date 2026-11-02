@@ -453,7 +453,16 @@ def run_new(args: argparse.Namespace) -> int:
     return 0
 
 
+def tolerant_output() -> None:
+    """Print `?` for a character the console cannot show, instead of failing (Windows cp1252)."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure:
+            reconfigure(errors="replace")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
+    tolerant_output()
     args = build_parser().parse_args(argv)
     if args.command == "doctor":
         return run_doctor(args)

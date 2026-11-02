@@ -47,3 +47,5 @@ guardrails:
     - dotnet build
     - dotnet test
     - dotnet format
+    - tail                             # the agents page test output: dotnet test ... | tail -8
+    - head
