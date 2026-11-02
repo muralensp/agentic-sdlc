@@ -258,3 +258,63 @@ def test_loop_status_for_a_damaged_record_is_an_error(tmp_path):
     (repo / ".adlc" / "logs" / "T-001" / "run-1" / "loop.json").write_text("{not json")
     with pytest.raises(CommandError, match="damaged"):
         loop_status(repo, "T-001")
+
+
+# --- the run folder stays valid and readable (ADLC-038) ---
+
+
+def test_a_call_record_stays_valid_json_when_a_number_looks_like_a_card(sc, tmp_path):
+    import json
+
+    from adlc.fake_runner import FakeRunner, ok
+    from adlc.guardrails import make_scrubber
+    from adlc.runlog import LoggingRunner
+    from adlc.runner import AgentRequest, Role
+
+    scrub = make_scrubber(sc.settings)
+    runner = LoggingRunner(
+        FakeRunner([ok("done", duration=4111111111111111.0)]), tmp_path / "run", scrub
+    )
+    runner.run(AgentRequest(Role.CODER, "p", tmp_path))
+    saved = json.loads((tmp_path / "run" / "calls" / "01-coder" / "result.json").read_text())
+    assert saved["status"] == "ok"
+
+
+def test_text_values_in_a_call_record_are_still_scrubbed(sc, tmp_path):
+    import json
+
+    from adlc.fake_runner import FakeRunner, ok
+    from adlc.guardrails import make_scrubber
+    from adlc.runlog import LoggingRunner
+    from adlc.runner import AgentRequest, Role
+
+    scrub = make_scrubber(sc.settings)
+    denied = ({"tool_name": "Bash", "tool_input": {"command": "echo 4111111111111111"}},)
+    runner = LoggingRunner(FakeRunner([ok("x", permission_denials=denied)]), tmp_path / "r", scrub)
+    runner.run(AgentRequest(Role.CODER, "p", tmp_path))
+    text = (tmp_path / "r" / "calls" / "01-coder" / "result.json").read_text()
+    assert "4111111111111111" not in text and "[REDACTED]" in text
+    json.loads(text)
+
+
+def test_the_summary_keeps_its_own_labels(sc):
+    from adlc.guardrails import make_scrubber
+
+    sc.run([edit(FIX_A), edit(FIX_B)], key="ADLC-016", scrub=make_scrubber(sc.settings))
+    summary = (sc.run_dir / "summary.md").read_text()
+    assert "Tokens:" in summary and "Tokens: [REDACTED]" not in summary
+    assert "[REDACTED]" not in summary.split("## Iterations")[0]
+
+
+def test_agent_text_in_the_summary_is_scrubbed(sc):
+    from adlc.guardrails import make_scrubber
+
+    secret = "4111111111111111"
+    denied = ({"tool_name": "Bash", "tool_input": {"command": f"echo {secret}"}},)
+    sc.run(
+        [edit(FIX_A, FIX_B, permission_denials=denied)],
+        key="ADLC-016",
+        scrub=make_scrubber(sc.settings),
+    )
+    assert secret not in (sc.run_dir / "summary.md").read_text()
+    assert secret not in (sc.run_dir / "loop.json").read_text()

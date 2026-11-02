@@ -179,3 +179,8 @@ def test_every_script_the_dotnet_profile_names_exists_in_boss(repo):
     assert len(scripts) == 8
     for script in scripts:
         assert (Path(BOSS) / script).is_file(), script
+
+
+def test_dotnet_agents_may_page_test_output_with_tail_and_head(repo):
+    commands = use(repo, "dotnet").guardrails.agent_commands
+    assert "tail" in commands and "head" in commands

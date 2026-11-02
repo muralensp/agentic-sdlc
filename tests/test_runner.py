@@ -17,6 +17,7 @@ from adlc.runner import (
     AgentResult,
     ClaudeCodeRunner,
     Role,
+    describe_denials,
     same_model,
 )
 
@@ -538,3 +539,27 @@ def test_live_one_cheap_call_to_the_real_claude(tmp_path):
     assert result.usage.output_tokens > 0 and result.usage.cost_usd_list > 0
     assert "haiku" in (result.primary_model or "")
     assert (tmp_path / "live.jsonl").stat().st_size > 0
+
+
+# --- denials are shown short (ADLC-038) ---
+
+
+def test_a_denied_call_is_shown_as_its_first_command_and_cut_short():
+    long = (
+        "dotnet test a.csproj 2>&1 | tail -8; dotnet format --verify-no-changes; echo " + "x" * 300
+    )
+    shown = describe_denials([{"tool_name": "Bash", "tool_input": {"command": long}}])
+    assert shown.startswith("Bash dotnet test a.csproj")
+    assert "dotnet format" not in shown and len(shown) < 120
+
+
+def test_at_most_three_denials_are_named_and_the_rest_counted():
+    denials = [{"tool_name": "Bash", "tool_input": {"command": f"cmd{i} arg"}} for i in range(6)]
+    shown = describe_denials(denials)
+    assert "cmd0" in shown and "cmd2" in shown and "cmd3" not in shown
+    assert "+3 more" in shown
+
+
+def test_a_few_short_denials_are_shown_in_full():
+    denials = [{"tool_name": "Write", "tool_input": {"file_path": "tests/a.cs"}}]
+    assert describe_denials(denials) == "Write tests/a.cs"

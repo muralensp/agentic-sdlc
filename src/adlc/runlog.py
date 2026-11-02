@@ -30,6 +30,22 @@ def new_run(repo: Path, key: str) -> tuple[int, Path]:
 CALLS = "calls"
 
 
+def scrubbed(value: Any, scrub: Callable[[str], str]) -> Any:
+    """`value` with every text in it scrubbed; numbers and structure are left alone.
+
+    Scrubbing the serialised JSON instead can eat part of a number and leave the file unreadable.
+    """
+    if isinstance(value, str):
+        return scrub(value)
+    if isinstance(value, Mapping):
+        return {str(k): scrubbed(v, scrub) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [scrubbed(v, scrub) for v in value]
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    return scrub(str(value))
+
+
 class LoggingRunner:
     """Wraps any runner: every call leaves its prompt, reply, status and denials in the run folder.
 
@@ -53,6 +69,11 @@ class LoggingRunner:
         folder.mkdir(parents=True, exist_ok=True)
         (folder / name).write_bytes(self.scrub(text).encode("utf-8"))
 
+    def _put_json(self, folder: Path, data: dict[str, Any]) -> None:
+        text = json.dumps(scrubbed(data, self.scrub), indent=2) + "\n"
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "result.json").write_bytes(text.encode("utf-8"))
+
     def run(self, request: AgentRequest) -> AgentResult:
         self.count += 1
         folder = self.run_dir / CALLS / f"{self.count:02d}-{request.role.value}"
@@ -65,7 +86,7 @@ class LoggingRunner:
                 "status": "exception",
                 "detail": f"{type(exc).__name__}: {exc}",
             }
-            self._put(folder, "result.json", json.dumps(failure) + "\n")
+            self._put_json(folder, failure)
             raise
         self._put(folder, "response.md", f"{result.text or result.detail}\n")
         saved = {
@@ -77,7 +98,7 @@ class LoggingRunner:
             "duration": result.duration,
             "turns": result.turns,
         }
-        self._put(folder, "result.json", json.dumps(saved, indent=2, default=str) + "\n")
+        self._put_json(folder, saved)
         return result
 
 

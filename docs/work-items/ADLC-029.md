@@ -3,7 +3,7 @@ key: ADLC-029
 type: test
 milestone: M4
 priority: 29
-depends_on: [ADLC-021, ADLC-024, ADLC-027, ADLC-034, ADLC-035, ADLC-037]
+depends_on: [ADLC-021, ADLC-024, ADLC-027, ADLC-034, ADLC-035, ADLC-037, ADLC-038]
 adr: none
 requires_approval: true
 ---
