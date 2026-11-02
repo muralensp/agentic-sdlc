@@ -86,6 +86,7 @@ class Guardrails:
     coder_paths: tuple[str, ...]  # allow-list for the Coder; empty: anything not protected
     allowed_commands: tuple[str, ...]  # if set, the only shell commands an agent may run
     forbidden_commands: tuple[str, ...]  # never run by an agent
+    agent_commands: tuple[str, ...] = ()  # run by the Tester and Coder besides the DoD and git
 
 
 @dataclass(frozen=True)
@@ -145,6 +146,7 @@ SCHEMA: dict = {
         "coder_paths": ("strs",),
         "allowed_commands": ("strs",),
         "forbidden_commands": ("strs",),
+        "agent_commands": ("strs",),
     },
     "scrub": {"pan": ("bool",), "patterns": ("strs",)},
     "methods": ("any",),
@@ -366,6 +368,7 @@ def load_config(repo: str | Path) -> Settings:
             tuple(merged["guardrails"]["coder_paths"]),
             tuple(merged["guardrails"]["allowed_commands"]),
             tuple(merged["guardrails"]["forbidden_commands"]),
+            tuple(merged["guardrails"]["agent_commands"]),
         ),
         scrub=Scrub(merged["scrub"]["pan"], tuple(merged["scrub"]["patterns"])),
     )

@@ -68,6 +68,18 @@ def _git(cwd: Path, *args: str) -> str:
     return done.stdout.strip()
 
 
+def _drop_progress(worktree: Path, base: str, settings: Settings) -> None:
+    """Keep the Coder's notes out of the pull request: they are working state, not the change.
+
+    The notes stay in the branch history. A `progress.md` the repository already had is left alone.
+    """
+    if _git(worktree, "ls-tree", base, "--", "progress.md"):
+        return
+    if _git(worktree, "ls-files", "--", "progress.md"):
+        _git(worktree, "rm", "-q", "--", "progress.md")
+        commit(worktree, "chore(loop): drop the progress notes", settings.git)
+
+
 def _facts(worktree: Path, base: str, settings: Settings, requires_approval: bool) -> Facts:
     """What the diff looks like, for the escalation triggers the PR step evaluates."""
     paths, counts = [], {}
@@ -280,6 +292,7 @@ def run_task(
     if not outcome.success:
         return _escalate(repo, key, [from_outcome(outcome)], run_dir, notify)
 
+    _drop_progress(made.path, base, settings)
     delivery = deliver(
         repo,
         key,

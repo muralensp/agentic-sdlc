@@ -355,6 +355,15 @@ def test_with_auto_merge_off_a_person_still_has_to_approve(tmp_path):
     assert "merge" not in forge.names()
 
 
+def test_the_progress_notes_do_not_reach_the_pull_request_branch(tmp_path):
+    scene = Scene(tmp_path, auto_merge=False)
+    notes = coder(("src/a.txt", "a"), ("progress.md", "# Progress\n- did a\n"))
+    result, _, _ = scene.go(write_tests(), notes, reviewer(), pr_writer())
+    assert result.delivery.pr is not None
+    tree = g(scene.worktree(), "ls-tree", "-r", "--name-only", "HEAD").split()
+    assert "src/a.txt" in tree and "progress.md" not in tree
+
+
 def test_a_large_diff_is_reported_to_the_pr_step_as_facts(tmp_path):
     scene = Scene(tmp_path, limits={"max_diff_lines": 2})
     big = coder(("src/a.txt", "a\nb\nc\nd\ne\n"))

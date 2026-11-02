@@ -97,12 +97,12 @@ def deny_rules(guard: Guardrails) -> tuple[str, ...]:
 
 
 def allow_rules(settings: Settings) -> tuple[str, ...]:
-    """The shell commands the Tester and Coder may run: the profile's DoD commands and plain git.
+    """The shell commands the Tester and Coder may run: the DoD, plain git and the profile's extras.
 
     Nobody can approve a tool call in `claude -p`, so anything not named here is denied. The deny
     rules above still go on every call and win over these.
     """
-    commands = (*settings.dod.values(), *GIT_RULES)
+    commands = (*settings.dod.values(), *GIT_RULES, *settings.guardrails.agent_commands)
     return tuple(dict.fromkeys(f"Bash({command}:*)" for command in commands))
 
 

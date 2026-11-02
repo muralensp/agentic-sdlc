@@ -73,6 +73,7 @@ merge:
 guardrails:                  # enforced by the orchestrator, not left to the model (FR-15)
   coder_paths: []            # globs the Coder may change; empty means anything not protected
   allowed_commands: []       # if set, the only shell commands an agent may run (prefixes)
+  agent_commands: []         # the Tester and Coder may also run these (prefixes), besides the DoD and git
   forbidden_commands:        # no network, installs, publishing or privilege (FR-17)
     - curl
     - wget
